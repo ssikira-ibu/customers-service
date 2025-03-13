@@ -1,38 +1,51 @@
-import { Model, DataTypes, Sequelize } from 'sequelize';
+import { Model, DataTypes, Sequelize, InferAttributes, InferCreationAttributes, CreationOptional } from 'sequelize';
 
-export class CustomerPhone extends Model {
-    public id!: string;
-    public customerId!: string;
-    public phoneNumber!: string;
-    public designation!: string; // e.g., 'home', 'work', 'mobile'
+export class CustomerPhone extends Model<
+    InferAttributes<CustomerPhone>,
+    InferCreationAttributes<CustomerPhone>
+> {
+    declare id: CreationOptional<string>;
+    declare customerId: string;
+    declare phoneNumber: string;
+    declare designation: string; // e.g., 'home', 'work', 'mobile'
 
     // Timestamps
-    public readonly createdAt!: Date;
-    public readonly updatedAt!: Date;
+    declare readonly createdAt: CreationOptional<Date>;
+    declare readonly updatedAt: CreationOptional<Date>;
 }
 
 export function initCustomerPhone(sequelize: Sequelize): void {
-    CustomerPhone.init({
-        id: {
-            type: DataTypes.UUID,
-            defaultValue: DataTypes.UUIDV4,
-            primaryKey: true,
+    CustomerPhone.init(
+        {
+            id: {
+                type: DataTypes.UUID,
+                defaultValue: DataTypes.UUIDV4,
+                primaryKey: true
+            },
+            customerId: {
+                type: DataTypes.UUID,
+                allowNull: false
+            },
+            phoneNumber: {
+                type: new DataTypes.STRING(128),
+                allowNull: false
+            },
+            designation: {
+                type: new DataTypes.STRING(128),
+                allowNull: false
+            },
+            createdAt: {
+                type: DataTypes.DATE,
+                allowNull: true
+            },
+            updatedAt: {
+                type: DataTypes.DATE,
+                allowNull: true
+            },
         },
-        customerId: {
-            type: DataTypes.UUID,
-            allowNull: false,
-        },
-        phoneNumber: {
-            type: DataTypes.STRING,
-            allowNull: false,
-        },
-        designation: {
-            allowNull: false,
-            type: DataTypes.ENUM('home', 'work', 'mobile', 'other'),
-        },
-    }, {
-        tableName: 'customer_phones',
-        sequelize,
-        timestamps: true,
-    });
+        {
+            tableName: 'phonenumbers',
+            sequelize,
+            timestamps: true,
+        });
 }

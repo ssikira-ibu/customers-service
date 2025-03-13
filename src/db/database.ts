@@ -3,6 +3,7 @@ import { Customer, defineCustomerModel } from './customer';
 import { CustomerNote, defineCustomerNoteModel } from './note';
 import { CustomerPhone, initCustomerPhone } from './customerphone';
 import { logger } from '../logging';
+import { CustomerAddress, initAddress } from './address';
 
 if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL is not defined in environment variables.');
@@ -21,6 +22,7 @@ export async function initializeDatabase() {
         defineCustomerModel(sequelize);
         defineCustomerNoteModel(sequelize);
         initCustomerPhone(sequelize);
+        initAddress(sequelize);
 
         Customer.hasMany(CustomerNote, {
             foreignKey: 'customerId',
@@ -33,6 +35,9 @@ export async function initializeDatabase() {
 
         Customer.hasMany(CustomerPhone, { foreignKey: 'customerId', as: 'phones' });
         CustomerPhone.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
+
+        Customer.hasMany(CustomerAddress, { foreignKey: 'customerId', as: 'addresses' });
+        CustomerAddress.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
 
         await sequelize.sync({ alter: true });
         logger.info('Database synchronized successfully.');
