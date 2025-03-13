@@ -1,21 +1,37 @@
 import Koa from 'koa';
-import Router from 'koa-router';
+import { DefaultContext, logger } from './logging';
 import { sequelize, authenticate } from './db/database';
 import { defineCustomerModel, Customer } from './db/customer';
-const app = new Koa();
-const router = new Router();
+import router from './router';
+
+const app = new Koa<Koa.DefaultState, DefaultContext>();
+app.context.log = logger;
 
 authenticate()
 defineCustomerModel(sequelize)
+sequelize.sync()
 
-// A simple route
-router.get('/', async (ctx) => {
-    ctx.body = 'Hello, World!';
+app.use(async (ctx, next) => {
+    await next();
+    const rt = ctx.response.get('X-Response-Time');
+    ctx.log.debug(`${ctx.method} ${ctx.url} - ${rt}`);
 });
 
-app.use(router.routes()).use(router.allowedMethods());
+// x-response-time
+
+app.use(async (ctx, next) => {
+    const start = Date.now();
+    await next();
+    const ms = Date.now() - start;
+    ctx.set('X-Response-Time', `${ms}ms`);
+});
+
+app
+    .use(router.routes())
+    .use(router.allowedMethods());
 
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });
