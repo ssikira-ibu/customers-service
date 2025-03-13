@@ -1,35 +1,30 @@
 import { Sequelize, DataTypes, Model, InferAttributes, InferCreationAttributes, CreationOptional } from 'sequelize';
 
-export class Customer extends Model<
-    InferAttributes<Customer>,
-    InferCreationAttributes<Customer>
+export class CustomerNote extends Model<
+    InferAttributes<CustomerNote>,
+    InferCreationAttributes<CustomerNote>
 > {
     declare id: CreationOptional<string>;
-    declare firstName: string;
-    declare lastName: string;
-    declare email: string;
+    declare customerId: string;
+    declare note: string;
     declare createdAt: CreationOptional<Date>;
     declare updatedAt: CreationOptional<Date>;
 }
 
-export function defineCustomerModel(sequelize: Sequelize) {
-    return Customer.init(
+export function defineCustomerNoteModel(sequelize: Sequelize) {
+    return CustomerNote.init(
         {
             id: {
                 type: DataTypes.UUID,
                 defaultValue: DataTypes.UUIDV4,
                 primaryKey: true
             },
-            firstName: {
-                type: new DataTypes.STRING(128),
+            customerId: {
+                type: new DataTypes.UUID,
                 allowNull: false
             },
-            lastName: {
-                type: new DataTypes.STRING(128),
-                allowNull: false
-            },
-            email: {
-                type: new DataTypes.STRING(128),
+            note: {
+                type: new DataTypes.STRING(512),
                 allowNull: false
             },
             createdAt: DataTypes.DATE,
@@ -37,7 +32,7 @@ export function defineCustomerModel(sequelize: Sequelize) {
         },
         {
             sequelize,
-            tableName: "customers",
+            tableName: "notes",
             timestamps: true
         }
     )

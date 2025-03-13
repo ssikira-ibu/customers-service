@@ -1,15 +1,20 @@
 import Router from "koa-router";
-import { Customer } from "./db/customer";
 import bodyParser from "koa-bodyparser";
 import { DefaultContext } from "./logging";
 import { DefaultState } from "koa";
-import { CustomerNote } from "./db/customer";
 import { z } from "zod";
+import { Customer, CustomerNote, CustomerPhone } from "./db/models";
+
+const phoneSchema = z.object({
+    phoneNumber: z.string().min(1, { message: "phoneNumber is required" }),
+    designation: z.string().min(1, { message: "designation is required" })
+}).strict();
 
 const customerSchema = z.object({
     firstName: z.string().min(1, { message: "firstName is required" }),
     lastName: z.string().min(1, { message: "firstName is required" }),
-    email: z.string().email({ message: "Invalid email address" })
+    email: z.string().email({ message: "Invalid email address" }),
+    phones: z.array(phoneSchema).optional()
 }).strict();
 
 const noteSchema = z.object({
@@ -27,6 +32,11 @@ router.get("/", async (ctx) => {
                 model: CustomerNote,
                 as: 'notes',
                 attributes: { exclude: ['customerId'] }
+            },
+            {
+                model: CustomerPhone,
+                as: 'phones',
+                attributes: { exclude: ['customerId', 'id', 'createdAt', 'updatedAt'] }
             }]
         });
 
@@ -48,7 +58,12 @@ router.post("/", async (ctx) => {
     }
 
     try {
-        const customer = await Customer.create(result.data);
+        const { phones, ...customerData } = result.data;
+        const customer = await Customer.create(customerData);
+
+        if (phones && phones.length > 0) {
+            await CustomerPhone.bulkCreate(phones.map(phone => ({ customerId: customer.id, ...phone })));
+        }
         ctx.status = 201;
         ctx.body = customer;
     } catch (error) {
@@ -59,10 +74,13 @@ router.post("/", async (ctx) => {
 });
 
 router.post("/:customerId/notes", async (ctx) => {
-    const customerId = parseInt(ctx.params.customerId);
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const customerId = ctx.params.customerId;
 
-    if (isNaN(customerId)) {
-        ctx.throw(400, 'customerId must be a number');
+    if (!uuidRegex.test(customerId)) {
+        ctx.status = 400;
+        ctx.body = { error: 'Invalid UUID format' };
+        return;
     }
 
     const result = noteSchema.safeParse(ctx.request.body);
