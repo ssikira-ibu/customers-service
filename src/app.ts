@@ -1,8 +1,12 @@
 import Koa from 'koa';
 import Router from 'koa-router';
-
+import { sequelize, authenticate } from './db/database';
+import { defineCustomerModel, Customer } from './db/customer';
 const app = new Koa();
 const router = new Router();
+
+authenticate()
+defineCustomerModel(sequelize)
 
 // A simple route
 router.get('/', async (ctx) => {

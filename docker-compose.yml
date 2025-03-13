@@ -6,7 +6,7 @@ services:
       - '3000:3000'
     environment:
       - PORT=3000
-      - DATABASE_URL=postgres://postgres:password@db:5432/mydb
+      - DATABASE_URL=postgres://postgres:password@db:5432/customers
     depends_on:
       - db
     volumes:
