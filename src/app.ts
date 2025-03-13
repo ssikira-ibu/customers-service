@@ -1,7 +1,7 @@
 import Koa from 'koa';
 import { DefaultContext, logger } from './logging';
 import { sequelize, authenticate } from './db/database';
-import { defineCustomerModel, Customer } from './db/customer';
+import { defineCustomerModel, Customer, defineCustomerNoteModel, buildAssociations } from './db/customer';
 import router from './router';
 
 const app = new Koa<Koa.DefaultState, DefaultContext>();
@@ -9,6 +9,9 @@ app.context.log = logger;
 
 authenticate()
 defineCustomerModel(sequelize)
+defineCustomerNoteModel(sequelize)
+buildAssociations()
+
 sequelize.sync()
 
 app.use(async (ctx, next) => {
