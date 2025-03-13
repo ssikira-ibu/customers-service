@@ -1,4 +1,5 @@
 import Koa from 'koa';
+import helmet from 'koa-helmet';
 import { DefaultContext, logger } from './logging';
 import { initializeDatabase } from './db/database';
 import router from './router';
@@ -8,6 +9,7 @@ app.context.log = logger;
 
 initializeDatabase().then(() => {
     app
+        .use(helmet())
         .use(router.routes())
         .use(router.allowedMethods())
         .use(async (ctx, next) => {

@@ -61,6 +61,7 @@ router.get("/", async (ctx) => {
         });
 
         ctx.body = customers;
+        ctx.status = 200;
     } catch (error) {
         ctx.log.error(error)
         ctx.status = 500;
@@ -121,6 +122,34 @@ router.post("/:customerId/notes", async (ctx) => {
         const note = await CustomerNote.create({ customerId, ...result.data });
         ctx.status = 201;
         ctx.body = note;
+    } catch (error) {
+        ctx.log.error(error);
+        ctx.status = 500;
+        ctx.body = { error: 'Internal server Error' };
+    }
+});
+
+router.delete("/:customerId", async (ctx) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const customerId = ctx.params.customerId;
+
+    if (!uuidRegex.test(customerId)) {
+        ctx.status = 400;
+        ctx.body = { error: 'Invalid UUID format' };
+        return;
+    }
+
+    try {
+        const customer = await Customer.findByPk(customerId);
+
+        if (!customer) {
+            ctx.status = 404;
+            ctx.body = { error: 'Customer not found' };
+            return;
+        }
+
+        await customer.destroy();
+        ctx.status = 204;
     } catch (error) {
         ctx.log.error(error);
         ctx.status = 500;
