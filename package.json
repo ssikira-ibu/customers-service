@@ -3,14 +3,19 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "tsc": "tsc",
-    "start": "ts-node ./src/app.ts | pino-pretty"
+    "start": "ts-node ./src/app.ts | pino-pretty",
+    "dev": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' ./src/app.ts | pino-pretty",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@koa/cors": "^5.0.0",
+    "dotenv": "^16.4.7",
+    "firebase-admin": "^13.2.0",
     "helmet": "^8.0.0",
     "koa": "^2.16.0",
     "koa-bodyparser": "^4.4.1",
@@ -29,6 +34,7 @@
     "@types/koa-bodyparser": "^4.3.12",
     "@types/koa-router": "^7.4.8",
     "@types/node": "^22.13.10",
+    "nodemon": "^3.0.0",
     "sequelize-cli": "^6.6.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.2"

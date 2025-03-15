@@ -4,8 +4,14 @@ services:
     ports:
       - '3000:3000'
     environment:
+      - NODE_ENV=production
       - PORT=3000
       - DATABASE_URL=postgres://postgres:password@db:5432/customers
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - FIREBASE_PRIVATE_KEY_PATH=/run/secrets/firebase_private_key
+      - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
+    secrets:
+      - firebase_private_key
     depends_on:
       - db
     volumes:
@@ -16,12 +22,20 @@ services:
     restart: always
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
       POSTGRES_DB: customers
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    secrets:
+      - db_password
+
+secrets:
+  firebase_private_key:
+    file: ./secrets/firebase-private-key.json
+  db_password:
+    file: ./secrets/db-password.txt
 
 volumes:
   pgdata:

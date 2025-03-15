@@ -1,15 +1,26 @@
+import * as dotenv from 'dotenv';
+if (process.env.NODE_ENV !== 'production') {
+    dotenv.config({ path: '.env.local' });
+}
+
 import Koa from 'koa';
-import helmet from 'koa-helmet';
+import helmet from 'koa-helmet'
 import { DefaultContext, logger } from './logging';
 import { initializeDatabase } from './db/database';
 import router from './router';
+import authRouter from './routes/auth';
+import './config/firebase';
+import { AuthContext, optionalAuthMiddleware } from './middleware/auth';
 
-const app = new Koa<Koa.DefaultState, DefaultContext>();
+const app = new Koa<Koa.DefaultState, AuthContext>();
 app.context.log = logger;
 
 initializeDatabase().then(() => {
     app
         .use(helmet())
+        .use(optionalAuthMiddleware)
+        .use(authRouter.routes())
+        .use(authRouter.allowedMethods())
         .use(router.routes())
         .use(router.allowedMethods())
         .use(async (ctx, next) => {
