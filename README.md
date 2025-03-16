@@ -8,7 +8,10 @@ Customer Management System is a web-based application with associated backend co
 - [Tech Stack](#tech-stack)
 - [Setup and Installation](#setup-and-installation)
   - [Prerequisites](#prerequisites)
+  - [Environment Configuration](#environment-configuration)
   - [Running the application](#running-the-application)
+- [Authentication](#authentication)
+- [Development](#development)
 
 ## Features
 
@@ -16,14 +19,18 @@ Customer Management System is a web-based application with associated backend co
 - **Internal Notes:** Support for multiple internal notes per customer to help staff with follow-ups and personalization.
 - **RESTful API:** Designed following RESTful best practices, with endpoints for customers and nested resources like phone numbers and notes.
 - **Data Validation:** Request bodies are validated using Zod to ensure proper data structure.
+- **Authentication:** Secure endpoints using Firebase Authentication.
 - **Scalable & Modular:** Built with a modular architecture using Sequelize models and associations.
 
 ## Tech Stack
 
 - **Backend:** Node.js, KoaJS, TypeScript
 - **Database:** PostgreSQL (with Sequelize ORM)
+- **Authentication:** Firebase Admin SDK
 - **Containerization:** Docker
 - **Validation:** Zod
+- **Logging:** Pino
+- **Security:** Helmet middleware
 
 ## Setup and Installation
 
@@ -32,26 +39,76 @@ Customer Management System is a web-based application with associated backend co
 - [Node.js](https://nodejs.org/) (v14 or higher)
 - [PostgreSQL](https://www.postgresql.org/)
 - [Docker](https://www.docker.com/) (optional, for containerized deployment)
+- Firebase project credentials
+
+### Environment Configuration
+
+Create a `.env.local` file in the root directory with the following variables:
+
+```env
+# Server Configuration
+PORT=3000
+NODE_ENV=development
+
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=your_database_name
+DB_USER=your_database_user
+DB_PASSWORD=your_database_password
+
+# Firebase Configuration
+FIREBASE_PROJECT_ID=your_project_id
+FIREBASE_PRIVATE_KEY=your_private_key
+FIREBASE_CLIENT_EMAIL=your_client_email
+```
 
 ### Running the application
 
 1. **Clone the repository**
 
 2. **Install dependencies**
-
-```
+```bash
 npm install
 ```
 
-3. **Run the application**
-
-Build and run the container:
-
+3. **Development mode**
+```bash
+npm run dev
 ```
+
+4. **Production mode**
+```bash
+npm run build
+npm start
+```
+
+5. **Using Docker**
+```bash
 docker-compose up --build
 ```
 
-This will setup and configure the neccessary resources (e.g. postgres, node, etc.), and allow you to access the API on predefined port, e.g. `http://localhost:3000`
+This will setup and configure the necessary resources (e.g. postgres, node, etc.), and allow you to access the API on predefined port, e.g. `http://localhost:3000`
+
+## Authentication
+
+The application uses Firebase Authentication for securing endpoints. To make authenticated requests:
+
+1. Include the Firebase ID token in the Authorization header:
+```
+Authorization: Bearer <your-firebase-token>
+```
+
+2. Some endpoints may be public while others require authentication. Check the API documentation for specific endpoint requirements.
+
+## Development
+
+Available npm scripts:
+
+- `npm run dev`: Start the development server with hot-reload
+- `npm run build`: Build the TypeScript project
+- `npm start`: Run the built application
+- `npm run typecheck`: Run TypeScript type checking
 
 
 
