@@ -7,18 +7,23 @@ import Koa from 'koa';
 import helmet from 'koa-helmet'
 import { DefaultContext, logger } from './logging';
 import { initializeDatabase } from './db/database';
-import router from './router';
+import router from './routes/customers';
 import authRouter from './routes/auth';
 import './config/firebase';
-import { AuthContext, optionalAuthMiddleware } from './middleware/auth';
+import { AuthContext } from './middleware/auth';
 
 const app = new Koa<Koa.DefaultState, AuthContext>();
 app.context.log = logger;
 
+async function logHeaders(ctx: Koa.Context, next: Koa.Next) {
+    // ctx.log.info(ctx.get('Authorization'));
+    await next();
+}
+
 initializeDatabase().then(() => {
     app
         .use(helmet())
-        .use(optionalAuthMiddleware)
+        .use(logHeaders)
         .use(authRouter.routes())
         .use(authRouter.allowedMethods())
         .use(router.routes())

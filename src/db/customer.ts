@@ -5,6 +5,7 @@ export class Customer extends Model<
     InferCreationAttributes<Customer>
 > {
     declare id: CreationOptional<string>;
+    declare userId: string; // References to the user table, owner of the customer
     declare firstName: string;
     declare lastName: string;
     declare email: string;
@@ -19,6 +20,10 @@ export function defineCustomerModel(sequelize: Sequelize) {
                 type: DataTypes.UUID,
                 defaultValue: DataTypes.UUIDV4,
                 primaryKey: true
+            },
+            userId: {
+                type: DataTypes.STRING,
+                allowNull: false
             },
             firstName: {
                 type: new DataTypes.STRING(128),

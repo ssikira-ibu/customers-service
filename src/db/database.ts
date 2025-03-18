@@ -4,14 +4,14 @@ import { CustomerNote, defineCustomerNoteModel } from './note';
 import { CustomerPhone, initCustomerPhone } from './customerphone';
 import { logger } from '../logging';
 import { CustomerAddress, initAddress } from './address';
-
+import { User, defineUserModel } from './user';
 if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL is not defined in environment variables.');
 }
 
 export const sequelize = new Sequelize(process.env.DATABASE_URL, {
     dialect: 'postgres',
-    logging: console.log, // Optional: for debugging SQL queries
+    logging: false, // Optional: for debugging SQL queries
 });
 
 export async function initializeDatabase() {
@@ -23,6 +23,7 @@ export async function initializeDatabase() {
         defineCustomerNoteModel(sequelize);
         initCustomerPhone(sequelize);
         initAddress(sequelize);
+        defineUserModel(sequelize);
 
         Customer.hasMany(CustomerNote, {
             foreignKey: 'customerId',
@@ -38,6 +39,9 @@ export async function initializeDatabase() {
 
         Customer.hasMany(CustomerAddress, { foreignKey: 'customerId', as: 'addresses' });
         CustomerAddress.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
+
+        Customer.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+        User.hasMany(Customer, { foreignKey: 'userId', as: 'customers' });
 
         await sequelize.sync({ alter: true });
         logger.info('Database synchronized successfully.');

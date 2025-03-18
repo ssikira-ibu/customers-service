@@ -1,10 +1,10 @@
 import Router from "koa-router";
 import bodyParser from "koa-bodyparser";
-import { DefaultContext } from "./logging";
+import { DefaultContext } from "../logging";
 import { DefaultState } from "koa";
 import { z } from "zod";
-import { Customer, CustomerAddress, CustomerNote, CustomerPhone } from "./db/models";
-
+import { Customer, CustomerAddress, CustomerNote, CustomerPhone } from "../db/models";
+import { authenticate } from "../middleware/auth";
 const phoneSchema = z.object({
     phoneNumber: z.string().min(1, { message: "phoneNumber is required" }),
     designation: z.string().min(1, { message: "designation is required" })
@@ -33,7 +33,9 @@ const noteSchema = z.object({
 
 const router = new Router<DefaultState, DefaultContext>({
     prefix: '/customers'
-}).use(bodyParser())
+})
+.use(bodyParser())
+.use(authenticate);
 
 router.get("/", async (ctx) => {
     try {
@@ -42,6 +44,10 @@ router.get("/", async (ctx) => {
                 ['lastName', 'ASC'],
                 ['firstName', 'ASC']
             ],
+            where: {
+                userId: ctx.user.uid
+            },
+            attributes: { exclude: ['userId', 'createdAt', 'updatedAt'] },
             include: [{
                 model: CustomerNote,
                 as: 'notes',
@@ -81,7 +87,10 @@ router.post("/", async (ctx) => {
     try {
         const { phones, addresses, ...customerData } = result.data;
         ctx.log.info('addresses', addresses);
-        const customer = await Customer.create(customerData);
+        const customer = await Customer.create({
+            ...customerData,
+            userId: ctx.user.uid
+        });
 
         if (phones && phones.length > 0) {
             await CustomerPhone.bulkCreate(phones.map(phone => ({ customerId: customer.id, ...phone })));
