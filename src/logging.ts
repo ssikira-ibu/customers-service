@@ -8,6 +8,6 @@ export interface DefaultContext extends Context {
 export const logger = pino({
     name: "customers-service",
     level: "debug",
-    msgPrefix: "[Koa] "
+    redact: ['req.headers.authorization']
 });
 
