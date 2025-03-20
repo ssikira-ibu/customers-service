@@ -7,7 +7,7 @@ import Koa from 'koa';
 import helmet from 'koa-helmet'
 import { DefaultContext, logger } from './logging';
 import { initializeDatabase } from './db/database';
-import router from './routes/customers';
+import router from './routes/customers/index';
 import authRouter from './routes/auth';
 import './config/firebase';
 import { AuthContext } from './middleware/auth';
