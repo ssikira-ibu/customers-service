@@ -18,19 +18,28 @@ Customer Management System is a web-based application with associated backend co
 - **Customer Profiles:** Manage detailed customer data including first name, last name, email, and multiple phone numbers.
 - **Internal Notes:** Support for multiple internal notes per customer to help staff with follow-ups and personalization.
 - **RESTful API:** Designed following RESTful best practices, with endpoints for customers and nested resources like phone numbers and notes.
-- **Data Validation:** Request bodies are validated using Zod to ensure proper data structure.
+- **Data Validation:** Request bodies are validated using Zod schema validation.
 - **Authentication:** Secure endpoints using Firebase Authentication.
 - **Scalable & Modular:** Built with a modular architecture using Sequelize models and associations.
+- **CORS Support:** Built-in CORS support for cross-origin requests.
+- **Security:** Enhanced security with Helmet middleware.
 
 ## Tech Stack
 
-- **Backend:** Node.js, KoaJS, TypeScript
-- **Database:** PostgreSQL (with Sequelize ORM)
-- **Authentication:** Firebase Admin SDK
-- **Containerization:** Docker
-- **Validation:** Zod
-- **Logging:** Pino
-- **Security:** Helmet middleware
+- **Runtime:** Node.js (v14 or higher)
+- **Framework:** KoaJS v2.16.0 with TypeScript
+- **Database:** PostgreSQL with Sequelize v6.37.6
+- **Authentication:** Firebase Admin SDK v13.2.0
+- **Containerization:** Docker & Docker Compose
+- **Validation:** Zod v3.24.2
+- **Logging:** Pino v9.6.0
+- **Security:** 
+  - Helmet v8.0.0
+  - CORS (@koa/cors v5.0.0)
+- **Development:**
+  - TypeScript v5.8.2
+  - Nodemon v3.0.0
+  - Sequelize CLI v6.6.2
 
 ## Setup and Installation
 
