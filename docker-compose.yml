@@ -1,41 +1,36 @@
 services:
   app:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile.dev
     ports:
       - '3000:3000'
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - PORT=3000
       - DATABASE_URL=postgres://postgres:password@db:5432/customers
-      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
-      - FIREBASE_PRIVATE_KEY_PATH=/run/secrets/firebase_private_key
-      - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
-    secrets:
-      - firebase_private_key
+      - DATABASE_HOST=db
+      - DATABASE_PORT=5432
+    env_file:
+      - .env.local
     depends_on:
       - db
     volumes:
       - .:/app
+      - /app/node_modules
+    command: sh ./scripts/start.dev.sh
 
   db:
     image: postgres:17
     restart: always
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_PASSWORD: password
       POSTGRES_DB: customers
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-    secrets:
-      - db_password
-
-secrets:
-  firebase_private_key:
-    file: ./secrets/firebase-private-key.json
-  db_password:
-    file: ./secrets/db-password.txt
 
 volumes:
-  pgdata:
+  pgdata: 

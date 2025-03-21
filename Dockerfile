@@ -1,22 +1,26 @@
 FROM node:23-alpine
 
-# Set the working directory to /app
 WORKDIR /app
 
-# Copy the package.json and package-lock.json files to the container
+# Install nodemon globally
+RUN npm install -g nodemon
+
+# Copy package files
 COPY package*.json ./
 
-# Install the dependencies
+ENV NODE_ENV=development
+
+# Install dependencies
 RUN npm install
 
-# Copy the rest of the application code to the container
+# Copy the rest of the application
 COPY . .
 
-# Set the NODE_ENV environment variable to "production"
-ENV NODE_ENV=production
+# Make scripts executable
+RUN chmod +x ./scripts/start.dev.sh ./scripts/wait-for-it.sh
 
-# Expose port 8080 for the application to listen on
-EXPOSE 8080
+# Expose port
+EXPOSE 3000
 
-# Start the application
-CMD ["npm", "start"]
+# Command to run the application
+CMD ["sh", "./scripts/start.dev.sh"] 

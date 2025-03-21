@@ -43,8 +43,7 @@ export async function initializeDatabase() {
         Customer.belongsTo(User, { foreignKey: 'userId', as: 'user' });
         User.hasMany(Customer, { foreignKey: 'userId', as: 'customers' });
 
-        await sequelize.sync({ alter: true });
-        logger.info('Database synchronized successfully.');
+        logger.info('Database models and associations initialized successfully.');
     } catch (error) {
         logger.error('Unable to connect to the database:', error);
         throw error
