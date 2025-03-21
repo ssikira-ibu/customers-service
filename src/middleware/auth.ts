@@ -16,10 +16,10 @@ export async function authenticate(ctx: AuthContext, next: Next) {
 
         const token = authHeader.substring(7);
         const decodedToken = await admin.auth().verifyIdToken(token);
-        
+
         // Attach the user information to the context
         ctx.user = decodedToken;
-        
+
         await next();
     } catch (error) {
         ctx.log.error('Authentication error:', error);
