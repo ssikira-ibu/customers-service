@@ -43,7 +43,14 @@ export function defineCustomerModel(sequelize: Sequelize) {
         {
             sequelize,
             tableName: "customers",
-            timestamps: true
+            timestamps: true,
+            indexes: [
+                {
+                    unique: true,
+                    fields: ['email', 'userId'],
+                    name: 'customers_email_userId_unique'
+                }
+            ]
         }
     )
 }
