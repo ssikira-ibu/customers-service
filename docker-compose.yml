@@ -1,8 +1,10 @@
 services:
   app:
-    build: 
+    build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
+    secrets:
+      - firebase_credentials
     ports:
       - '3000:3000'
     environment:
@@ -18,14 +20,15 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-    command: sh ./scripts/start.dev.sh
 
   db:
     image: postgres:17
     restart: always
+    user: postgres
+    secrets:
+      - db_password
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
       POSTGRES_DB: customers
     ports:
       - "5432:5432"
@@ -33,4 +36,11 @@ services:
       - pgdata:/var/lib/postgresql/data
 
 volumes:
-  pgdata: 
+  pgdata:
+
+
+secrets:
+  db_password:
+    file: ./secrets/db-password.txt
+  firebase_credentials:
+    file: ./secrets/firebase-private-key.json
