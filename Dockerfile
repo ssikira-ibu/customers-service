@@ -1,22 +1,33 @@
 FROM node:23-alpine
 
-# Set the working directory to /app
+ENV NODE_ENV=development
+ENV DOCKERIZE_VERSION v0.9.3
+
+# Install dockerize
+RUN apk update --no-cache \
+    && apk add --no-cache wget openssl \
+    && wget -O - https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-alpine-linux-amd64-$DOCKERIZE_VERSION.tar.gz | tar xzf - -C /usr/local/bin \
+    && apk del wget
+
+# Set working directory
 WORKDIR /app
 
-# Copy the package.json and package-lock.json files to the container
+# Install nodemon globally
+RUN npm install -g nodemon
+
+# Copy package files
 COPY package*.json ./
 
-# Install the dependencies
+# Install dependencies
 RUN npm install
 
-# Copy the rest of the application code to the container
+# Copy the rest of the application
 COPY . .
 
-# Set the NODE_ENV environment variable to "production"
-ENV NODE_ENV=production
+# Expose port
+EXPOSE 3000
 
-# Expose port 8080 for the application to listen on
-EXPOSE 8080
+ENTRYPOINT [ "sh", "./start.sh" ]
 
-# Start the application
-CMD ["npm", "start"]
+# Command to run the application
+CMD ["npm", "run", "dev"] 
