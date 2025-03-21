@@ -5,6 +5,7 @@ import { DefaultState } from "koa";
 import { z } from "zod";
 import { Customer, CustomerAddress, CustomerNote, CustomerPhone } from "../db/models";
 import { authenticate } from "../middleware/auth";
+import { Op, Sequelize, literal } from "sequelize";
 
 const phoneSchema = z.object({
     phoneNumber: z.string().min(1, { message: "phoneNumber is required" }),
@@ -32,11 +33,15 @@ const noteSchema = z.object({
     note: z.string().min(1, { message: "note is required" })
 }).strict();
 
+const searchSchema = z.object({
+    query: z.string().min(1, { message: "Search query is required" })
+}).strict();
+
 const router = new Router<DefaultState, DefaultContext>({
     prefix: '/customers'
 })
-.use(bodyParser())
-.use(authenticate);
+    .use(bodyParser())
+    .use(authenticate);
 
 router.get("/", async (ctx) => {
     try {
@@ -683,6 +688,64 @@ router.delete("/:customerId/notes/:id", async (ctx) => {
         ctx.log.error(error);
         ctx.status = 500;
         ctx.body = { error: 'Internal server Error' };
+    }
+});
+
+router.get("/search", async (ctx) => {
+    try {
+        const { query } = searchSchema.parse(ctx.query);
+
+        // Clean and prepare the search query
+        const searchText = query.trim().toLowerCase();
+        const searchQuery = searchText.split(/\s+/).join(' & ');
+
+        const customers = await Customer.findAll({
+            where: Sequelize.literal(`
+                "userId" = '${ctx.user.uid}' AND (
+                    -- Full-text search match
+                    search_vector @@ to_tsquery('english', '${searchQuery}')
+                    OR
+                    -- Fuzzy match using trigram similarity
+                    similarity(search_text, '${searchText}') > 0.3
+                )
+            `),
+            attributes: {
+                include: [
+                    [
+                        // Combine both ranking methods
+                        literal(`
+                            (
+                                ts_rank(search_vector, to_tsquery('english', '${searchQuery}')) * 2 +
+                                similarity(search_text, '${searchText}')
+                            ) / 3
+                        `),
+                        'rank'
+                    ]
+                ]
+            },
+            order: [
+                [literal('rank'), 'DESC'],
+                ['lastName', 'ASC'],
+                ['firstName', 'ASC']
+            ]
+        });
+
+        ctx.body = customers;
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            ctx.status = 400;
+            ctx.body = {
+                error: "Validation failed",
+                details: error.errors
+            };
+            return;
+        }
+
+        ctx.status = 500;
+        ctx.body = {
+            error: "An error occurred while searching customers"
+        };
+        ctx.app.emit('error', error, ctx);
     }
 });
 
