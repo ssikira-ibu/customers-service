@@ -91,6 +91,14 @@ resource "google_cloud_run_service" "api" {
   location = var.region
 
   template {
+
+    metadata {
+      annotations = {
+        # If you later have more than one instance, separate them with commas.
+        "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.pg.connection_name
+      }
+    }
+    
     spec {
       service_account_name = google_service_account.run_sa.email
       containers {
