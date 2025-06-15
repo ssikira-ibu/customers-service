@@ -1,14 +1,16 @@
 import * as admin from 'firebase-admin';
 import { logger } from '../logging';
-import { config } from './env';
-import { readFileSync } from 'fs';
-
-const firebaseCredsPath = '/run/secrets/firebase_credentials';
 
 try {
-    // Read and parse the Firebase credentials from Docker secret
-    const firebaseCredsRaw = readFileSync(firebaseCredsPath, 'utf8');
-    const firebaseCredentials = JSON.parse(firebaseCredsRaw);
+    // Read Firebase credentials from environment variable
+    const firebaseCredentialsRaw = process.env.FIREBASE_CREDENTIALS;
+    
+    if (!firebaseCredentialsRaw) {
+        throw new Error('FIREBASE_CREDENTIALS environment variable is not set');
+    }
+
+    // Parse the base64-encoded credentials
+    const firebaseCredentials = JSON.parse(firebaseCredentialsRaw);
 
     admin.initializeApp({
         credential: admin.credential.cert(firebaseCredentials),

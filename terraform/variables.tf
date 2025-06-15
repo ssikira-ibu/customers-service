@@ -20,3 +20,9 @@ variable "firebase_sa" {
   description = "base64-encoded service-account JSON"
   sensitive   = true
 }
+
+variable "image_tag" {
+  type        = string
+  description = "Docker image tag to deploy (e.g., 'latest' or timestamp)"
+  default     = "latest"
+}

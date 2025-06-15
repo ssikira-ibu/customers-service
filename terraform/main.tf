@@ -59,15 +59,6 @@ resource "google_sql_user" "app" {
   password = var.db_password
 }
 
-# ---- VPC connector (serverless access) -----------------------------------
-resource "google_vpc_access_connector" "connector" {
-  name   = "run-sql-connector"
-  region = var.region
-  subnet {
-    name = "default"
-  }
-}
-
 # ---- Cloud Run service account -------------------------------------------
 resource "google_service_account" "run_sa" {
   account_id   = "customers-api"
@@ -103,7 +94,7 @@ resource "google_cloud_run_service" "api" {
     spec {
       service_account_name = google_service_account.run_sa.email
       containers {
-        image = "${var.region}-docker.pkg.dev/${var.project_id}/app/customers:0.1.0"
+        image = "${var.region}-docker.pkg.dev/${var.project_id}/app/customers:${var.image_tag}"
 
         env {
           name  = "DATABASE_URL"
@@ -116,6 +107,11 @@ resource "google_cloud_run_service" "api" {
         }
 
         env {
+          name  = "NODE_ENV"
+          value = "production"
+        }
+
+        env {
           name = "FIREBASE_CREDENTIALS"
           value_from {
             secret_key_ref {
@@ -123,6 +119,27 @@ resource "google_cloud_run_service" "api" {
               key  = "latest"
             }
           }
+        }
+
+        resources {
+          limits = {
+            cpu    = "1000m"
+            memory = "512Mi"
+          }
+        }
+
+        ports {
+          container_port = 8080
+        }
+
+        startup_probe {
+          http_get {
+            path = "/health"
+          }
+          initial_delay_seconds = 10
+          period_seconds        = 5
+          timeout_seconds       = 3
+          failure_threshold     = 3
         }
       }
     }

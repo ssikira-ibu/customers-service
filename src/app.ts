@@ -16,7 +16,15 @@ import requestLogger from './middleware/logging';
 const app = new Koa<Koa.DefaultState, AuthContext>();
 app.context.log = logger;
 
-
+// Add a health check endpoint
+app.use(async (ctx, next) => {
+    if (ctx.path === '/health') {
+        ctx.status = 200;
+        ctx.body = { status: 'ok', timestamp: new Date().toISOString() };
+        return;
+    }
+    await next();
+});
 
 initializeDatabase().then(() => {
     app
@@ -27,10 +35,10 @@ initializeDatabase().then(() => {
         .use(router.routes())
         .use(router.allowedMethods());
 
-    const PORT = process.env.PORT || 3000;
+    const PORT = parseInt(process.env.PORT || '8080', 10); // Parse as number for Cloud Run
 
-    app.listen(PORT, () => {
-        logger.info(`Server is running on http://localhost:${PORT}`);
+    app.listen(PORT, '0.0.0.0', () => { // Listen on all interfaces
+        logger.info(`Server is running on http://0.0.0.0:${PORT}`);
     });
 }).catch((error) => {
     logger.error('Failed to start:', error);
