@@ -4,6 +4,7 @@ import { DefaultContext } from "../../logging";
 import { DefaultState } from "koa";
 import { z } from "zod";
 import { Customer, CustomerAddress } from "../../db/models";
+import { authenticate, AuthContext } from "../../middleware/auth";
 
 const addressSchema = z.object({
     street: z.string().min(1, { message: "street is required" }),
@@ -14,9 +15,9 @@ const addressSchema = z.object({
     addressType: z.string().optional() // e.g., 'home', 'work'
 }).strict();
 
-const router = new Router<DefaultState, DefaultContext>({
+const router = new Router<DefaultState, AuthContext>({
     prefix: '/customers/:customerId/addresses'
-}).use(bodyParser());
+}).use(bodyParser()).use(authenticate);
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -29,7 +30,27 @@ router.get("/", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     try {
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
+
+        if (!customer) {
+            ctx.status = 404;
+            ctx.body = { error: 'Customer not found' };
+            return;
+        }
+
         const addresses = await CustomerAddress.findAll({
             where: { customerId },
             attributes: { exclude: ['customerId', 'id', 'createdAt', 'updatedAt'] }
@@ -53,6 +74,12 @@ router.post("/", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     const result = addressSchema.safeParse(ctx.request.body);
 
     if (!result.success) {
@@ -63,7 +90,14 @@ router.post("/", async (ctx) => {
 
     try {
         const address = result.data;
-        const customer = await Customer.findByPk(customerId);
+        
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
 
         if (!customer) {
             ctx.status = 404;
@@ -91,8 +125,33 @@ router.get("/:id", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     try {
-        const address = await CustomerAddress.findByPk(addressId);
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
+
+        if (!customer) {
+            ctx.status = 404;
+            ctx.body = { error: 'Customer not found' };
+            return;
+        }
+
+        const address = await CustomerAddress.findOne({
+            where: {
+                id: addressId,
+                customerId
+            }
+        });
 
         if (!address) {
             ctx.status = 404;
@@ -119,6 +178,12 @@ router.put("/:id", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     const result = addressSchema.safeParse(ctx.request.body);
 
     if (!result.success) {
@@ -129,7 +194,14 @@ router.put("/:id", async (ctx) => {
 
     try {
         const address = result.data;
-        const customer = await Customer.findByPk(customerId);
+        
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
 
         if (!customer) {
             ctx.status = 404;
@@ -137,7 +209,12 @@ router.put("/:id", async (ctx) => {
             return;
         }
 
-        const updatedAddress = await CustomerAddress.findByPk(addressId);
+        const updatedAddress = await CustomerAddress.findOne({
+            where: {
+                id: addressId,
+                customerId
+            }
+        });
 
         if (!updatedAddress) {
             ctx.status = 404;
@@ -165,8 +242,20 @@ router.delete("/:id", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     try {
-        const customer = await Customer.findByPk(customerId);
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
 
         if (!customer) {
             ctx.status = 404;
@@ -174,7 +263,12 @@ router.delete("/:id", async (ctx) => {
             return;
         }
 
-        const address = await CustomerAddress.findByPk(addressId);
+        const address = await CustomerAddress.findOne({
+            where: {
+                id: addressId,
+                customerId
+            }
+        });
 
         if (!address) {
             ctx.status = 404;

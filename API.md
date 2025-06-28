@@ -129,16 +129,36 @@ All endpoints (except `/auth` and `/health`) require authentication via a Fireba
 All customer endpoints require authentication.
 
 ### GET `/customers`
-- **Response:** Array of customers, each with notes, phones, and addresses.
+- **Response:** Array of customer summaries with counts (optimized for lists/tables)
+- **Includes:** `id`, `firstName`, `lastName`, `email`, `phoneCount`, `addressCount`, `noteCount`, `reminderCount`, `createdAt`, `updatedAt`
+
+### GET `/customers/:customerId`
+- **Response:** Full customer object with all related data (phones, addresses, notes, reminders)
+- **Errors:** 400 (invalid UUID), 404 (not found), 500 (other)
 
 ### POST `/customers`
 - **Request:** `{ firstName, lastName, email, phones?, addresses? }`
 - **Response:** Created customer object.
 - **Errors:** 400 (validation), 409 (duplicate email), 500 (other)
 
+### PUT `/customers/:customerId`
+- **Request:** `{ firstName?, lastName?, email? }` (all fields optional)
+- **Response:** Updated customer object.
+- **Errors:** 400 (validation), 404 (not found), 409 (duplicate email), 500 (other)
+
+### PATCH `/customers/:customerId`
+- **Request:** `{ firstName?, lastName?, email? }` (all fields optional)
+- **Response:** Updated customer object.
+- **Errors:** 400 (validation), 404 (not found), 409 (duplicate email), 500 (other)
+
 ### DELETE `/customers/:customerId`
 - **Response:** 204 No Content
 - **Errors:** 400 (invalid UUID), 404 (not found), 500 (other)
+
+### GET `/customers/search`
+- **Query Parameters:** `query` (required)
+- **Response:** Array of customers matching search criteria
+- **Errors:** 400 (validation), 500 (other)
 
 ---
 
@@ -155,6 +175,11 @@ All customer endpoints require authentication.
 ### GET `/customers/:customerId/phones/:id`
 - **Response:** Phone object.
 - **Errors:** 400 (invalid UUID), 404 (not found), 500 (other)
+
+### PUT `/customers/:customerId/phones/:id`
+- **Request:** `{ phoneNumber, designation }`
+- **Response:** Updated phone object.
+- **Errors:** 400 (validation), 404 (not found), 500 (other)
 
 ### DELETE `/customers/:customerId/phones/:id`
 - **Response:** 204 No Content
@@ -176,6 +201,11 @@ All customer endpoints require authentication.
 - **Response:** Address object.
 - **Errors:** 400 (invalid UUID), 404 (not found), 500 (other)
 
+### PUT `/customers/:customerId/addresses/:id`
+- **Request:** `{ street, city, state, postalCode, country, addressType? }`
+- **Response:** Updated address object.
+- **Errors:** 400 (validation), 404 (not found), 500 (other)
+
 ### DELETE `/customers/:customerId/addresses/:id`
 - **Response:** 204 No Content
 - **Errors:** 400 (invalid UUID), 404 (not found), 500 (other)
@@ -185,7 +215,7 @@ All customer endpoints require authentication.
 ## Customer Notes
 
 ### GET `/customers/:customerId/notes`
-- **Response:** Array of note objects for the customer.
+- **Response:** Array of note objects for the customer (ordered by creation date, newest first).
 
 ### POST `/customers/:customerId/notes`
 - **Request:** `{ note }`
@@ -196,6 +226,11 @@ All customer endpoints require authentication.
 - **Response:** Note object.
 - **Errors:** 400 (invalid UUID), 404 (not found), 500 (other)
 
+### PUT `/customers/:customerId/notes/:id`
+- **Request:** `{ note }`
+- **Response:** Updated note object.
+- **Errors:** 400 (validation), 404 (not found), 500 (other)
+
 ### DELETE `/customers/:customerId/notes/:id`
 - **Response:** 204 No Content
 - **Errors:** 400 (invalid UUID), 404 (not found), 500 (other)
@@ -205,12 +240,27 @@ All customer endpoints require authentication.
 ## Customer Reminders
 
 ### GET `/customers/:customerId/reminders`
-- **Response:** Array of reminder objects for the customer.
+- **Response:** Array of reminder objects for the customer (ordered by completion status, then due date).
 
 ### POST `/customers/:customerId/reminders`
-- **Request:** `{ title, description?, dueDate, priority? }`
+- **Request:** `{ description?, dueDate, priority? }`
 - **Response:** Created reminder object.
 - **Errors:** 400 (validation), 404 (customer not found), 500 (other)
+
+### GET `/customers/:customerId/reminders/:id`
+- **Response:** Reminder object.
+- **Errors:** 400 (invalid UUID), 404 (not found), 500 (other)
+
+### PUT `/customers/:customerId/reminders/:id`
+- **Request:** `{ description?, dueDate, priority? }`
+- **Response:** Updated reminder object.
+- **Errors:** 400 (validation), 404 (not found), 500 (other)
+
+### PATCH `/customers/:customerId/reminders/:id`
+- **Request:** `{ description?, dueDate?, priority?, dateCompleted? }` (all fields optional)
+- **Response:** Updated reminder object.
+- **Notes:** Use `dateCompleted: null` to mark as incomplete, `dateCompleted: "2024-01-01T00:00:00Z"` to mark as complete
+- **Errors:** 400 (validation), 404 (not found), 500 (other)
 
 ### DELETE `/customers/:customerId/reminders/:id`
 - **Response:** 204 No Content
@@ -231,5 +281,8 @@ All customer endpoints require authentication.
 ## Notes
 - All IDs are UUIDs.
 - All endpoints (except `/auth` and `/health`) require authentication.
-- All POST/DELETE endpoints expect and return JSON.
-- Timestamps are in ISO 8601 format. 
+- All POST/PUT/PATCH/DELETE endpoints expect and return JSON.
+- Timestamps are in ISO 8601 format.
+- Customer list endpoint returns summary data optimized for tables/lists.
+- Customer detail endpoint returns full data with all related resources.
+- Reminder completion is handled via PATCH with `dateCompleted` field. 

@@ -12,6 +12,13 @@ const reminderSchema = z.object({
     priority: z.enum(['low', 'medium', 'high']).optional(),
 }).strict();
 
+const reminderUpdateSchema = z.object({
+    description: z.string().max(1000).nullable().optional(),
+    dueDate: z.string().datetime({ message: "Invalid date format" }).optional(),
+    priority: z.enum(['low', 'medium', 'high']).optional(),
+    dateCompleted: z.string().datetime({ message: "Invalid date format" }).nullable().optional(),
+}).strict();
+
 const router = new Router<DefaultState, AuthContext>({
     prefix: '/customers/:customerId/reminders'
 }).use(bodyParser()).use(authenticate);
@@ -43,17 +50,11 @@ router.get("/", async (ctx) => {
             }
         });
 
-        ctx.log.info(customerId);
-
         if (!customer) {
             ctx.status = 404;
             ctx.body = { error: 'Customer not found' };
             return;
         }
-
-        ctx.log.info("now going to the db", ctx.user.uid);
-        ctx.log.info(customerId);
-        ctx.log.info(ctx.user.uid);
 
         const reminders = await CustomerReminder.findAll({
             where: {
@@ -130,8 +131,8 @@ router.post("/", async (ctx) => {
     }
 });
 
-// Mark a reminder as completed
-router.put("/:id/complete", async (ctx) => {
+// Get a specific reminder
+router.get("/:id", async (ctx) => {
     const customerId = ctx.params.customerId;
     const reminderId = ctx.params.id;
 
@@ -162,7 +163,60 @@ router.put("/:id/complete", async (ctx) => {
             return;
         }
 
-        await reminder.update({ dateCompleted: new Date() });
+        ctx.body = reminder;
+        ctx.status = 200;
+    } catch (error: any) {
+        ctx.log.error(error);
+        ctx.status = 500;
+        ctx.body = { error: 'Internal server Error' };
+    }
+});
+
+// Update a reminder (PUT - full update)
+router.put("/:id", async (ctx) => {
+    const customerId = ctx.params.customerId;
+    const reminderId = ctx.params.id;
+
+    if (!uuidRegex.test(customerId) || !uuidRegex.test(reminderId)) {
+        ctx.status = 400;
+        ctx.body = { error: 'Invalid UUID format' };
+        return;
+    }
+
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
+    const result = reminderSchema.safeParse(ctx.request.body);
+
+    if (!result.success) {
+        ctx.status = 400;
+        ctx.body = { errors: result.error.errors };
+        return;
+    }
+
+    try {
+        const reminder = await CustomerReminder.findOne({
+            where: {
+                id: reminderId,
+                customerId,
+                userId: ctx.user.uid
+            }
+        });
+
+        if (!reminder) {
+            ctx.status = 404;
+            ctx.body = { error: 'Reminder not found' };
+            return;
+        }
+
+        await reminder.update({
+            ...result.data,
+            dueDate: new Date(result.data.dueDate)
+        });
+
         ctx.status = 200;
         ctx.body = reminder;
     } catch (error: any) {
@@ -172,8 +226,8 @@ router.put("/:id/complete", async (ctx) => {
     }
 });
 
-// Mark a reminder as not completed (reopen)
-router.put("/:id/reopen", async (ctx) => {
+// Update a reminder (PATCH - partial update)
+router.patch("/:id", async (ctx) => {
     const customerId = ctx.params.customerId;
     const reminderId = ctx.params.id;
 
@@ -186,6 +240,14 @@ router.put("/:id/reopen", async (ctx) => {
     if (!ctx.user?.uid) {
         ctx.status = 401;
         ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
+    const result = reminderUpdateSchema.safeParse(ctx.request.body);
+
+    if (!result.success) {
+        ctx.status = 400;
+        ctx.body = { errors: result.error.errors };
         return;
     }
 
@@ -204,7 +266,20 @@ router.put("/:id/reopen", async (ctx) => {
             return;
         }
 
-        await reminder.update({ dateCompleted: null });
+        const updateData: any = { ...result.data };
+        
+        // Handle dateCompleted specially - can be null to reopen
+        if (result.data.dateCompleted !== undefined) {
+            updateData.dateCompleted = result.data.dateCompleted ? new Date(result.data.dateCompleted) : null;
+        }
+        
+        // Handle dueDate if provided
+        if (result.data.dueDate) {
+            updateData.dueDate = new Date(result.data.dueDate);
+        }
+
+        await reminder.update(updateData);
+
         ctx.status = 200;
         ctx.body = reminder;
     } catch (error: any) {

@@ -4,14 +4,15 @@ import { DefaultContext } from "../../logging";
 import { DefaultState } from "koa";
 import { z } from "zod";
 import { Customer, CustomerNote } from "../../db/models";
+import { authenticate, AuthContext } from "../../middleware/auth";
 
 const noteSchema = z.object({
     note: z.string().min(1, { message: "note is required" })
 }).strict();
 
-const router = new Router<DefaultState, DefaultContext>({
+const router = new Router<DefaultState, AuthContext>({
     prefix: '/customers/:customerId/notes'
-}).use(bodyParser());
+}).use(bodyParser()).use(authenticate);
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -24,10 +25,31 @@ router.get("/", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     try {
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
+
+        if (!customer) {
+            ctx.status = 404;
+            ctx.body = { error: 'Customer not found' };
+            return;
+        }
+
         const notes = await CustomerNote.findAll({
             where: { customerId },
-            attributes: { exclude: ['customerId'] }
+            attributes: { exclude: ['customerId'] },
+            order: [['createdAt', 'DESC']]
         });
 
         ctx.body = notes;
@@ -48,6 +70,12 @@ router.post("/", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     const result = noteSchema.safeParse(ctx.request.body);
 
     if (!result.success) {
@@ -57,6 +85,20 @@ router.post("/", async (ctx) => {
     }
 
     try {
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
+
+        if (!customer) {
+            ctx.status = 404;
+            ctx.body = { error: 'Customer not found' };
+            return;
+        }
+
         const note = await CustomerNote.create({ customerId, ...result.data });
         ctx.status = 201;
         ctx.body = note;
@@ -77,8 +119,33 @@ router.get("/:id", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     try {
-        const note = await CustomerNote.findByPk(noteId);
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
+
+        if (!customer) {
+            ctx.status = 404;
+            ctx.body = { error: 'Customer not found' };
+            return;
+        }
+
+        const note = await CustomerNote.findOne({
+            where: {
+                id: noteId,
+                customerId
+            }
+        });
 
         if (!note) {
             ctx.status = 404;
@@ -105,6 +172,12 @@ router.put("/:id", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     const result = noteSchema.safeParse(ctx.request.body);
 
     if (!result.success) {
@@ -115,7 +188,14 @@ router.put("/:id", async (ctx) => {
 
     try {
         const note = result.data;
-        const customer = await Customer.findByPk(customerId);
+        
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
 
         if (!customer) {
             ctx.status = 404;
@@ -123,7 +203,12 @@ router.put("/:id", async (ctx) => {
             return;
         }
 
-        const updatedNote = await CustomerNote.findByPk(noteId);
+        const updatedNote = await CustomerNote.findOne({
+            where: {
+                id: noteId,
+                customerId
+            }
+        });
 
         if (!updatedNote) {
             ctx.status = 404;
@@ -151,8 +236,20 @@ router.delete("/:id", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     try {
-        const customer = await Customer.findByPk(customerId);
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
 
         if (!customer) {
             ctx.status = 404;
@@ -160,7 +257,12 @@ router.delete("/:id", async (ctx) => {
             return;
         }
 
-        const note = await CustomerNote.findByPk(noteId);
+        const note = await CustomerNote.findOne({
+            where: {
+                id: noteId,
+                customerId
+            }
+        });
 
         if (!note) {
             ctx.status = 404;
