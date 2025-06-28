@@ -243,8 +243,7 @@ router.get("/:customerId", validateCustomerId, async (ctx) => {
             include: [{
                 model: CustomerNote,
                 as: 'notes',
-                attributes: { exclude: ['customerId'] },
-                order: [['createdAt', 'DESC']]
+                attributes: { exclude: ['customerId'] }
             },
             {
                 model: CustomerPhone,
@@ -259,12 +258,13 @@ router.get("/:customerId", validateCustomerId, async (ctx) => {
             {
                 model: CustomerReminder,
                 as: 'reminders',
-                attributes: { exclude: ['customerId', 'id'] },
-                order: [
-                    ['dateCompleted', 'ASC NULLS FIRST'],
-                    ['dueDate', 'ASC']
-                ]
-            }]
+                attributes: { exclude: ['customerId', 'id'] }
+            }],
+            order: [
+                [{ model: CustomerNote, as: 'notes' }, 'createdAt', 'DESC'],
+                [{ model: CustomerReminder, as: 'reminders' }, 'dateCompleted', 'ASC NULLS FIRST'],
+                [{ model: CustomerReminder, as: 'reminders' }, 'dueDate', 'ASC']
+            ]
         });
 
         if (!customer) {

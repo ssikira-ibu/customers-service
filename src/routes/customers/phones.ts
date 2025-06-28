@@ -2,6 +2,7 @@ import Router from "koa-router";
 import bodyParser from "koa-bodyparser";
 import { DefaultState } from "koa";
 import { z } from "zod";
+import { Op } from "sequelize";
 import { CustomerPhone } from "../../db/models";
 import { authenticate } from "../../middleware/auth";
 import { 
@@ -53,6 +54,21 @@ router.post("/", validateAndRequireCustomerAccess, async (ctx) => {
 
     try {
         const phone = result.data;
+        
+        // Check if phone number already exists for this customer
+        const existingPhone = await CustomerPhone.findOne({
+            where: { 
+                customerId, 
+                phoneNumber: phone.phoneNumber 
+            }
+        });
+
+        if (existingPhone) {
+            ctx.status = 400;
+            ctx.body = { error: "Phone number already exists for this customer" };
+            return;
+        }
+
         const createdPhone = await CustomerPhone.create({ customerId, ...phone });
         ctx.status = 201;
         ctx.body = createdPhone;
@@ -110,6 +126,21 @@ router.put("/:id", validateUuids, validateAndRequireCustomerAccess, async (ctx) 
 
         if (!updatedPhone) {
             sendNotFoundError(ctx, 'Phone');
+            return;
+        }
+
+        // Check if phone number already exists for this customer (excluding current phone)
+        const existingPhone = await CustomerPhone.findOne({
+            where: { 
+                customerId, 
+                phoneNumber: phone.phoneNumber,
+                id: { [Op.ne]: phoneId }
+            }
+        });
+
+        if (existingPhone) {
+            ctx.status = 400;
+            ctx.body = { error: "Phone number already exists for this customer" };
             return;
         }
 
