@@ -122,10 +122,56 @@ The backend uses Firebase Authentication for user management and API security:
 ### Customer Endpoints
 
 #### GET `/customers`
-- **Description:** Get all customers for authenticated user
-- **Response:** Array of customer objects with nested notes, phones, and addresses
+- **Description:** Get all customers for authenticated user with summary data optimized for lists/tables
+- **Response:** Array of customer objects with count object containing related resource counts
+- **Response Format:**
+  ```json
+  [
+    {
+      "id": "uuid",
+      "firstName": "John",
+      "lastName": "Doe",
+      "email": "john@example.com",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "count": {
+        "phones": 2,
+        "addresses": 1,
+        "notes": 5,
+        "reminders": 3
+      }
+    }
+  ]
+  ```
 - **Auth Required:** Yes
 - **Status Codes:** 200 (success), 401 (unauthorized), 500 (error)
+
+#### GET `/customers/:customerId`
+- **Description:** Get detailed customer information with all related data
+- **Response:** Full customer object with nested phones, addresses, notes, and reminders
+- **Auth Required:** Yes
+- **Status Codes:** 200 (success), 400 (invalid UUID), 404 (not found), 401 (unauthorized), 500 (error)
+
+#### PUT `/customers/:customerId`
+- **Description:** Update customer information (full update)
+- **Request Body:**
+  ```json
+  {
+    "firstName": "John",
+    "lastName": "Doe", 
+    "email": "john@example.com"
+  }
+  ```
+- **Response:** Updated customer object
+- **Auth Required:** Yes
+- **Status Codes:** 200 (success), 400 (validation), 404 (not found), 409 (duplicate email), 500 (error)
+
+#### PATCH `/customers/:customerId`
+- **Description:** Partially update customer information
+- **Request Body:** Any subset of customer fields (all optional)
+- **Response:** Updated customer object
+- **Auth Required:** Yes
+- **Status Codes:** 200 (success), 400 (validation), 404 (not found), 409 (duplicate email), 500 (error)
 
 #### POST `/customers`
 - **Description:** Create new customer
@@ -302,32 +348,111 @@ The backend uses Firebase Authentication for user management and API security:
 - **Request Body:**
   ```json
   {
-    "title": "Follow up call",
     "description": "Call to check on service satisfaction",
     "dueDate": "2024-01-15T10:00:00.000Z",
     "priority": "medium"
   }
   ```
+- **Notes:** 
+  - `description` is required (1-1000 characters)
+  - `priority` is optional (defaults to "medium")
+  - `dueDate` must be ISO 8601 format
 - **Response:** Created reminder object
 - **Auth Required:** Yes
 - **Status Codes:** 201 (success), 400 (validation), 404 (customer not found), 500 (error)
 
-#### PUT `/customers/:customerId/reminders/:id/complete`
-- **Description:** Mark reminder as completed
-- **Response:** Updated reminder object
+#### GET `/customers/:customerId/reminders/:id`
+- **Description:** Get specific reminder
+- **Response:** Reminder object
 - **Auth Required:** Yes
 - **Status Codes:** 200 (success), 400 (invalid UUID), 404 (not found), 500 (error)
 
-#### PUT `/customers/:customerId/reminders/:id/reopen`
-- **Description:** Mark reminder as not completed (reopen)
+#### PUT `/customers/:customerId/reminders/:id`
+- **Description:** Update reminder (full update)
+- **Request Body:** Same as POST (all fields required)
 - **Response:** Updated reminder object
 - **Auth Required:** Yes
-- **Status Codes:** 200 (success), 400 (invalid UUID), 404 (not found), 500 (error)
+- **Status Codes:** 200 (success), 400 (validation), 404 (not found), 500 (error)
+
+#### PATCH `/customers/:customerId/reminders/:id`
+- **Description:** Partially update reminder (including completion status)
+- **Request Body:**
+  ```json
+  {
+    "description": "Updated description",
+    "dueDate": "2024-01-20T10:00:00.000Z",
+    "priority": "high",
+    "dateCompleted": "2024-01-15T10:00:00.000Z"
+  }
+  ```
+- **Notes:**
+  - All fields are optional
+  - Use `dateCompleted: null` to mark as incomplete
+  - Use `dateCompleted: "ISO_DATE"` to mark as complete
+- **Response:** Updated reminder object
+- **Auth Required:** Yes
+- **Status Codes:** 200 (success), 400 (validation), 404 (not found), 500 (error)
 
 #### DELETE `/customers/:customerId/reminders/:id`
 - **Description:** Delete reminder
 - **Auth Required:** Yes
 - **Status Codes:** 204 (success), 400 (invalid UUID), 404 (not found), 500 (error)
+
+### Global Reminder Endpoints
+
+#### GET `/reminders/analytics`
+- **Description:** Get global analytics for all user's reminders across all customers
+- **Response:**
+  ```json
+  {
+    "counts": {
+      "total": 45,
+      "active": 22,
+      "overdue": 8,
+      "completed": 15
+    },
+    "completionRate": 0.33
+  }
+  ```
+- **Notes:**
+  - `active` = total - completed (includes overdue)
+  - `overdue` = incomplete reminders past due date
+  - `completionRate` = completed / total (0-1 decimal)
+- **Auth Required:** Yes
+- **Status Codes:** 200 (success), 401 (unauthorized), 500 (error)
+
+#### GET `/reminders`
+- **Description:** Get global list of reminders across all customers with filtering
+- **Query Parameters:**
+  - `status`: `active`, `overdue`, `completed`, or `all` (default: `all`)
+  - `include`: `customer` to include customer details in response
+- **Response:** Array of reminder objects
+- **Response Format (with include=customer):**
+  ```json
+  [
+    {
+      "id": "uuid",
+      "description": "Follow up call",
+      "dueDate": "2024-01-15T10:00:00.000Z",
+      "priority": "high",
+      "dateCompleted": null,
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "customer": {
+        "id": "uuid",
+        "firstName": "John",
+        "lastName": "Doe",
+        "email": "john@example.com"
+      }
+    }
+  ]
+  ```
+- **Usage Examples:**
+  - `GET /reminders?include=customer` - All reminders with customer data
+  - `GET /reminders?status=active&include=customer` - Active reminders only
+  - `GET /reminders?status=overdue` - Overdue reminders without customer data
+- **Auth Required:** Yes
+- **Status Codes:** 200 (success), 400 (validation), 401 (unauthorized), 500 (error)
 
 ## 4. Error Response Format
 

@@ -11,6 +11,7 @@ import { initializeDatabase } from './db/database';
 import router from './routes/customers/index';
 import authRouter from './routes/auth';
 import healthRouter from './routes/health';
+import remindersRouter from './routes/reminders';
 import './config/firebase';
 import { AuthContext } from './middleware/auth';
 import requestLogger from './middleware/logging';
@@ -59,6 +60,8 @@ initializeDatabase().then(() => {
         .use(healthRouter.routes())
         .use(healthRouter.allowedMethods())
         .use(authRouter.allowedMethods())
+        .use(remindersRouter.routes())
+        .use(remindersRouter.allowedMethods())
         .use(router.routes())
         .use(router.allowedMethods());
 
