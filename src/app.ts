@@ -10,6 +10,7 @@ import { logger } from './logging';
 import { initializeDatabase } from './db/database';
 import router from './routes/customers/index';
 import authRouter from './routes/auth';
+import healthRouter from './routes/health';
 import './config/firebase';
 import { AuthContext } from './middleware/auth';
 import requestLogger from './middleware/logging';
@@ -17,22 +18,11 @@ import requestLogger from './middleware/logging';
 const app = new Koa<Koa.DefaultState, AuthContext>();
 app.context.log = logger;
 
-// Add a health check endpoint
-app.use(async (ctx, next) => {
-    if (ctx.path === '/health') {
-        ctx.status = 200;
-        ctx.body = { status: 'ok', timestamp: new Date().toISOString() };
-        return;
-    }
-    await next();
-});
-
 initializeDatabase().then(() => {
     app
         .use(helmet())
         .use(cors({
             origin: (ctx) => {
-                // Allow requests from your frontend during development
                 const origin = ctx.get('Origin');
                 
                 // Allow localhost with any port for development
@@ -50,8 +40,7 @@ initializeDatabase().then(() => {
                 
                 // Add your production domains here when needed
                 const allowedOrigins = [
-                    'https://yourdomain.com',
-                    'https://www.yourdomain.com'
+                    'https://google.com'
                 ];
                 
                 if (allowedOrigins.includes(origin)) {
@@ -67,6 +56,8 @@ initializeDatabase().then(() => {
         }))
         .use(requestLogger)
         .use(authRouter.routes())
+        .use(healthRouter.routes())
+        .use(healthRouter.allowedMethods())
         .use(authRouter.allowedMethods())
         .use(router.routes())
         .use(router.allowedMethods());
