@@ -5,6 +5,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 import Koa from 'koa';
 import helmet from 'koa-helmet'
+// import cors from '@koa/cors'; // Removed
 import { logger } from './logging';
 import { initializeDatabase } from './db/database';
 import router from './routes/customers/index';

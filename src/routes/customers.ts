@@ -3,9 +3,10 @@ import bodyParser from "koa-bodyparser";
 import { DefaultContext } from "../logging";
 import { DefaultState } from "koa";
 import { z } from "zod";
-import { Customer, CustomerAddress, CustomerNote, CustomerPhone } from "../db/models";
+import { Customer, CustomerAddress, CustomerNote, CustomerPhone, CustomerReminder } from "../db/models";
 import { authenticate } from "../middleware/auth";
 import { Op, Sequelize, literal } from "sequelize";
+import { ensureUserExists } from "../utils/user";
 
 const phoneSchema = z.object({
     phoneNumber: z.string().min(1, { message: "phoneNumber is required" }),
@@ -69,6 +70,11 @@ router.get("/", async (ctx) => {
                 as: 'addresses',
                 attributes: { exclude: ['customerId', 'id', 'createdAt', 'updatedAt'] }
             },
+            {
+                model: CustomerReminder,
+                as: 'reminders',
+                attributes: { exclude: ['customerId', 'id'] }
+            }
             ]
         });
 
@@ -92,6 +98,9 @@ router.post("/", async (ctx) => {
 
     try {
         const { phones, addresses, ...customerData } = result.data;
+
+        // Ensure user exists in database, create if not
+        await ensureUserExists(ctx.user.uid);
 
         // Check if customer with this email already exists for the current user
         const existingCustomer = await Customer.findOne({

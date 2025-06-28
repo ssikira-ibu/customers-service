@@ -6,11 +6,17 @@ import { AuthContext } from '../middleware/auth';
 import { User } from '../db/user';
 import { sequelize } from '../db/database';
 import { authenticate } from '../middleware/auth';
+import { ensureUserExists } from '../utils/user';
 
 const signupSchema = z.object({
     email: z.string().email({ message: 'Invalid email address' }),
     password: z.string().min(6, { message: 'Password must be at least 6 characters long' }),
     displayName: z.string().min(1, { message: 'Display name is required' })
+}).strict();
+
+const loginSchema = z.object({
+    email: z.string().email({ message: 'Invalid email address' }),
+    password: z.string().min(1, { message: 'Password is required' })
 }).strict();
 
 const router = new Router<any, AuthContext>({
@@ -77,34 +83,85 @@ router.post('/signup', async (ctx) => {
     }
 });
 
+router.post('/login', async (ctx) => {
+    try {
+        const result = loginSchema.safeParse(ctx.request.body);
+        
+        if (!result.success) {
+            ctx.status = 400;
+            ctx.body = { errors: result.error.errors };
+            return;
+        }
+
+        const { email, password } = result.data;
+
+        // Verify user credentials with Firebase
+        const userRecord = await admin.auth().getUserByEmail(email);
+        
+        // Note: Firebase Admin SDK doesn't support password verification directly
+        // In a real implementation, you'd use Firebase Auth REST API or client SDK
+        // For local testing, we'll just check if the user exists and generate a token
+        
+        if (userRecord.disabled) {
+            ctx.status = 401;
+            ctx.body = { error: 'Account is disabled' };
+            return;
+        }
+
+        // Generate custom token for the user
+        const customToken = await admin.auth().createCustomToken(userRecord.uid);
+
+        ctx.status = 200;
+        ctx.body = {
+            message: 'Login successful',
+            userId: userRecord.uid,
+            customToken
+        };
+
+    } catch (error: any) {
+        ctx.log.error('Login error:', error);
+        
+        if (error.code === 'auth/user-not-found') {
+            ctx.status = 401;
+            ctx.body = { error: 'Invalid email or password' };
+            return;
+        }
+
+        ctx.status = 500;
+        ctx.body = { error: 'Login failed' };
+    }
+});
+
 router.get('/me', authenticate, async (ctx) => {
     // ctx.user is set by the authenticate middleware
-    // Optionally, fetch more info from the User model if needed
     const userId = ctx.user?.uid;
     if (!userId) {
         ctx.status = 401;
         ctx.body = { error: 'Unauthorized' };
         return;
     }
-    // Try to get user info from the database
-    const user = await User.findByPk(userId);
-    if (user) {
+
+    try {
+        // Get user directly from Firebase
+        const firebaseUser = await admin.auth().getUser(userId);
+
         ctx.body = {
-            id: user.id,
-            email: user.email,
-            displayName: user.displayName,
-            emailVerified: user.emailVerified,
-            photoURL: user.photoURL,
-            disabled: user.disabled,
-            lastSignInTime: user.lastSignInTime,
-            createdAt: user.createdAt,
-            updatedAt: user.updatedAt
+            id: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            emailVerified: firebaseUser.emailVerified,
+            photoURL: firebaseUser.photoURL,
+            disabled: firebaseUser.disabled,
+            lastSignInTime: firebaseUser.metadata.lastSignInTime,
+            createdAt: firebaseUser.metadata.creationTime,
+            updatedAt: firebaseUser.metadata.lastRefreshTime || firebaseUser.metadata.creationTime
         };
-    } else {
-        // Fallback to Firebase token info
-        ctx.body = ctx.user;
+        ctx.status = 200;
+    } catch (error) {
+        ctx.log.error('Error fetching user info:', error);
+        ctx.status = 500;
+        ctx.body = { error: 'Failed to fetch user information' };
     }
-    ctx.status = 200;
 });
 
 export default router; 

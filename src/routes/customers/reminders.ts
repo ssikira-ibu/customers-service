@@ -1,22 +1,20 @@
 import Router from "koa-router";
 import bodyParser from "koa-bodyparser";
-import { DefaultContext } from "../../logging";
 import { DefaultState } from "koa";
 import { z } from "zod";
 import { Customer, CustomerReminder } from "../../db/models";
-import { authenticate } from "../../middleware/auth";
+import { authenticate, AuthContext } from "../../middleware/auth";
 import { Op } from "sequelize";
 
 const reminderSchema = z.object({
-    title: z.string().min(1, { message: "Title is required" }).max(256),
     description: z.string().max(1000).nullable().optional(),
     dueDate: z.string().datetime({ message: "Invalid date format" }),
     priority: z.enum(['low', 'medium', 'high']).optional(),
 }).strict();
 
-const router = new Router<DefaultState, DefaultContext>({
+const router = new Router<DefaultState, AuthContext>({
     prefix: '/customers/:customerId/reminders'
-}).use(bodyParser());
+}).use(bodyParser()).use(authenticate);
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -30,6 +28,12 @@ router.get("/", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     try {
         // Verify the customer exists and belongs to the current user
         const customer = await Customer.findOne({
@@ -39,11 +43,17 @@ router.get("/", async (ctx) => {
             }
         });
 
+        ctx.log.info(customerId);
+
         if (!customer) {
             ctx.status = 404;
             ctx.body = { error: 'Customer not found' };
             return;
         }
+
+        ctx.log.info("now going to the db", ctx.user.uid);
+        ctx.log.info(customerId);
+        ctx.log.info(ctx.user.uid);
 
         const reminders = await CustomerReminder.findAll({
             where: {
@@ -52,8 +62,7 @@ router.get("/", async (ctx) => {
             },
             order: [
                 ['dateCompleted', 'ASC NULLS FIRST'],
-                ['dueDate', 'ASC'],
-                ['priority', 'DESC']
+                ['dueDate', 'ASC']
             ]
         });
 
@@ -73,6 +82,12 @@ router.post("/", async (ctx) => {
     if (!uuidRegex.test(customerId)) {
         ctx.status = 400;
         ctx.body = { error: 'Invalid UUID format' };
+        return;
+    }
+
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
         return;
     }
 
@@ -126,6 +141,12 @@ router.put("/:id/complete", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     try {
         const reminder = await CustomerReminder.findOne({
             where: {
@@ -162,6 +183,12 @@ router.put("/:id/reopen", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     try {
         const reminder = await CustomerReminder.findOne({
             where: {
@@ -195,6 +222,12 @@ router.delete("/:id", async (ctx) => {
     if (!uuidRegex.test(customerId) || !uuidRegex.test(reminderId)) {
         ctx.status = 400;
         ctx.body = { error: 'Invalid UUID format' };
+        return;
+    }
+
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
         return;
     }
 
