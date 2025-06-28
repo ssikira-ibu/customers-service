@@ -2,9 +2,18 @@ import Router from "koa-router";
 import bodyParser from "koa-bodyparser";
 import { DefaultState } from "koa";
 import { z } from "zod";
-import { Customer, CustomerReminder } from "../../db/models";
-import { authenticate, AuthContext } from "../../middleware/auth";
-import { Op } from "sequelize";
+import { CustomerReminder } from "../../db/models";
+import { authenticate } from "../../middleware/auth";
+import { 
+  validateAndRequireCustomerAccess, 
+  validateUuids, 
+  ValidationContext 
+} from "../../middleware/validation";
+import { 
+  sendValidationError, 
+  sendNotFoundError, 
+  sendInternalServerError
+} from "../../utils/errors";
 
 const reminderSchema = z.object({
     description: z.string().max(1000).nullable().optional(),
@@ -19,47 +28,19 @@ const reminderUpdateSchema = z.object({
     dateCompleted: z.string().datetime({ message: "Invalid date format" }).nullable().optional(),
 }).strict();
 
-const router = new Router<DefaultState, AuthContext>({
+const router = new Router<DefaultState, ValidationContext>({
     prefix: '/customers/:customerId/reminders'
 }).use(bodyParser()).use(authenticate);
 
-const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 // Get all reminders for a customer
-router.get("/", async (ctx) => {
-    const customerId = ctx.params.customerId;
-
-    if (!uuidRegex.test(customerId)) {
-        ctx.status = 400;
-        ctx.body = { error: 'Invalid UUID format' };
-        return;
-    }
-
-    if (!ctx.user?.uid) {
-        ctx.status = 401;
-        ctx.body = { error: 'Unauthorized' };
-        return;
-    }
+router.get("/", validateAndRequireCustomerAccess, async (ctx) => {
+    const customerId = ctx.validatedCustomerId!;
 
     try {
-        // Verify the customer exists and belongs to the current user
-        const customer = await Customer.findOne({
-            where: {
-                id: customerId,
-                userId: ctx.user.uid
-            }
-        });
-
-        if (!customer) {
-            ctx.status = 404;
-            ctx.body = { error: 'Customer not found' };
-            return;
-        }
-
         const reminders = await CustomerReminder.findAll({
             where: {
                 customerId,
-                userId: ctx.user.uid
+                userId: ctx.user!.uid
             },
             order: [
                 ['dateCompleted', 'ASC NULLS FIRST'],
@@ -71,54 +52,26 @@ router.get("/", async (ctx) => {
         ctx.status = 200;
     } catch (error: any) {
         ctx.log.error(error);
-        ctx.status = 500;
-        ctx.body = { error: 'Internal server Error' };
+        sendInternalServerError(ctx);
     }
 });
 
 // Create a new reminder for a customer
-router.post("/", async (ctx) => {
-    const customerId = ctx.params.customerId;
-
-    if (!uuidRegex.test(customerId)) {
-        ctx.status = 400;
-        ctx.body = { error: 'Invalid UUID format' };
-        return;
-    }
-
-    if (!ctx.user?.uid) {
-        ctx.status = 401;
-        ctx.body = { error: 'Unauthorized' };
-        return;
-    }
+router.post("/", validateAndRequireCustomerAccess, async (ctx) => {
+    const customerId = ctx.validatedCustomerId!;
 
     const result = reminderSchema.safeParse(ctx.request.body);
 
     if (!result.success) {
-        ctx.status = 400;
-        ctx.body = { errors: result.error.errors };
+        sendValidationError(ctx, result.error);
         return;
     }
 
     try {
-        // Verify the customer exists and belongs to the current user
-        const customer = await Customer.findOne({
-            where: {
-                id: customerId,
-                userId: ctx.user.uid
-            }
-        });
-
-        if (!customer) {
-            ctx.status = 404;
-            ctx.body = { error: 'Customer not found' };
-            return;
-        }
-
         const reminder = await CustomerReminder.create({
             ...result.data,
             customerId,
-            userId: ctx.user.uid,
+            userId: ctx.user!.uid,
             dueDate: new Date(result.data.dueDate)
         });
 
@@ -126,40 +79,26 @@ router.post("/", async (ctx) => {
         ctx.body = reminder;
     } catch (error: any) {
         ctx.log.error(error);
-        ctx.status = 500;
-        ctx.body = { error: 'Internal server Error' };
+        sendInternalServerError(ctx);
     }
 });
 
 // Get a specific reminder
-router.get("/:id", async (ctx) => {
-    const customerId = ctx.params.customerId;
-    const reminderId = ctx.params.id;
-
-    if (!uuidRegex.test(customerId) || !uuidRegex.test(reminderId)) {
-        ctx.status = 400;
-        ctx.body = { error: 'Invalid UUID format' };
-        return;
-    }
-
-    if (!ctx.user?.uid) {
-        ctx.status = 401;
-        ctx.body = { error: 'Unauthorized' };
-        return;
-    }
+router.get("/:id", validateUuids, validateAndRequireCustomerAccess, async (ctx) => {
+    const customerId = ctx.validatedCustomerId!;
+    const reminderId = ctx.validatedResourceId!;
 
     try {
         const reminder = await CustomerReminder.findOne({
             where: {
                 id: reminderId,
                 customerId,
-                userId: ctx.user.uid
+                userId: ctx.user!.uid
             }
         });
 
         if (!reminder) {
-            ctx.status = 404;
-            ctx.body = { error: 'Reminder not found' };
+            sendNotFoundError(ctx, 'Reminder');
             return;
         }
 
@@ -167,33 +106,19 @@ router.get("/:id", async (ctx) => {
         ctx.status = 200;
     } catch (error: any) {
         ctx.log.error(error);
-        ctx.status = 500;
-        ctx.body = { error: 'Internal server Error' };
+        sendInternalServerError(ctx);
     }
 });
 
 // Update a reminder (PUT - full update)
-router.put("/:id", async (ctx) => {
-    const customerId = ctx.params.customerId;
-    const reminderId = ctx.params.id;
-
-    if (!uuidRegex.test(customerId) || !uuidRegex.test(reminderId)) {
-        ctx.status = 400;
-        ctx.body = { error: 'Invalid UUID format' };
-        return;
-    }
-
-    if (!ctx.user?.uid) {
-        ctx.status = 401;
-        ctx.body = { error: 'Unauthorized' };
-        return;
-    }
+router.put("/:id", validateUuids, validateAndRequireCustomerAccess, async (ctx) => {
+    const customerId = ctx.validatedCustomerId!;
+    const reminderId = ctx.validatedResourceId!;
 
     const result = reminderSchema.safeParse(ctx.request.body);
 
     if (!result.success) {
-        ctx.status = 400;
-        ctx.body = { errors: result.error.errors };
+        sendValidationError(ctx, result.error);
         return;
     }
 
@@ -202,13 +127,12 @@ router.put("/:id", async (ctx) => {
             where: {
                 id: reminderId,
                 customerId,
-                userId: ctx.user.uid
+                userId: ctx.user!.uid
             }
         });
 
         if (!reminder) {
-            ctx.status = 404;
-            ctx.body = { error: 'Reminder not found' };
+            sendNotFoundError(ctx, 'Reminder');
             return;
         }
 
@@ -221,33 +145,19 @@ router.put("/:id", async (ctx) => {
         ctx.body = reminder;
     } catch (error: any) {
         ctx.log.error(error);
-        ctx.status = 500;
-        ctx.body = { error: 'Internal server Error' };
+        sendInternalServerError(ctx);
     }
 });
 
 // Update a reminder (PATCH - partial update)
-router.patch("/:id", async (ctx) => {
-    const customerId = ctx.params.customerId;
-    const reminderId = ctx.params.id;
-
-    if (!uuidRegex.test(customerId) || !uuidRegex.test(reminderId)) {
-        ctx.status = 400;
-        ctx.body = { error: 'Invalid UUID format' };
-        return;
-    }
-
-    if (!ctx.user?.uid) {
-        ctx.status = 401;
-        ctx.body = { error: 'Unauthorized' };
-        return;
-    }
+router.patch("/:id", validateUuids, validateAndRequireCustomerAccess, async (ctx) => {
+    const customerId = ctx.validatedCustomerId!;
+    const reminderId = ctx.validatedResourceId!;
 
     const result = reminderUpdateSchema.safeParse(ctx.request.body);
 
     if (!result.success) {
-        ctx.status = 400;
-        ctx.body = { errors: result.error.errors };
+        sendValidationError(ctx, result.error);
         return;
     }
 
@@ -256,13 +166,12 @@ router.patch("/:id", async (ctx) => {
             where: {
                 id: reminderId,
                 customerId,
-                userId: ctx.user.uid
+                userId: ctx.user!.uid
             }
         });
 
         if (!reminder) {
-            ctx.status = 404;
-            ctx.body = { error: 'Reminder not found' };
+            sendNotFoundError(ctx, 'Reminder');
             return;
         }
 
@@ -284,40 +193,26 @@ router.patch("/:id", async (ctx) => {
         ctx.body = reminder;
     } catch (error: any) {
         ctx.log.error(error);
-        ctx.status = 500;
-        ctx.body = { error: 'Internal server Error' };
+        sendInternalServerError(ctx);
     }
 });
 
 // Delete a reminder
-router.delete("/:id", async (ctx) => {
-    const customerId = ctx.params.customerId;
-    const reminderId = ctx.params.id;
-
-    if (!uuidRegex.test(customerId) || !uuidRegex.test(reminderId)) {
-        ctx.status = 400;
-        ctx.body = { error: 'Invalid UUID format' };
-        return;
-    }
-
-    if (!ctx.user?.uid) {
-        ctx.status = 401;
-        ctx.body = { error: 'Unauthorized' };
-        return;
-    }
+router.delete("/:id", validateUuids, validateAndRequireCustomerAccess, async (ctx) => {
+    const customerId = ctx.validatedCustomerId!;
+    const reminderId = ctx.validatedResourceId!;
 
     try {
         const reminder = await CustomerReminder.findOne({
             where: {
                 id: reminderId,
                 customerId,
-                userId: ctx.user.uid
+                userId: ctx.user!.uid
             }
         });
 
         if (!reminder) {
-            ctx.status = 404;
-            ctx.body = { error: 'Reminder not found' };
+            sendNotFoundError(ctx, 'Reminder');
             return;
         }
 
@@ -325,8 +220,7 @@ router.delete("/:id", async (ctx) => {
         ctx.status = 204;
     } catch (error: any) {
         ctx.log.error(error);
-        ctx.status = 500;
-        ctx.body = { error: 'Internal server Error' };
+        sendInternalServerError(ctx);
     }
 });
 
