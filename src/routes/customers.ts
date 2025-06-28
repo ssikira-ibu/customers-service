@@ -108,6 +108,127 @@ router.get("/", async (ctx) => {
     }
 });
 
+// GET /customers/search - Search customers
+router.get("/search", async (ctx) => {
+    try {
+        const { query } = searchSchema.parse(ctx.query);
+
+        // Clean and prepare the search query
+        const searchText = query.trim().toLowerCase();
+        const queryLength = searchText.length;
+
+        let whereClause: string;
+        let rankingClause: string;
+
+        if (queryLength <= 2) {
+            // Very short queries: Use ILIKE pattern matching for immediate feedback
+            const likePattern = `%${searchText}%`;
+            whereClause = `
+                "userId" = '${ctx.user!.uid}' AND (
+                    "firstName" ILIKE '${likePattern}'
+                    OR "lastName" ILIKE '${likePattern}'
+                    OR email ILIKE '${likePattern}'
+                )
+            `;
+            rankingClause = `
+                CASE 
+                    WHEN "firstName" ILIKE '${searchText}%' THEN 3
+                    WHEN "lastName" ILIKE '${searchText}%' THEN 3
+                    WHEN email ILIKE '${searchText}%' THEN 2
+                    ELSE 1
+                END
+            `;
+        } else if (queryLength <= 4) {
+            // Short queries: Lower trigram threshold + prefix matching + fuzzy
+            const likePattern = `%${searchText}%`;
+            const prefixPattern = `${searchText}%`;
+            whereClause = `
+                "userId" = '${ctx.user!.uid}' AND (
+                    -- Exact prefix matches (highest priority)
+                    "firstName" ILIKE '${prefixPattern}'
+                    OR "lastName" ILIKE '${prefixPattern}'
+                    OR email ILIKE '${prefixPattern}'
+                    OR
+                    -- Fuzzy match with lower threshold for short queries
+                    similarity(search_text, '${searchText}') > 0.15
+                    OR
+                    -- Substring matches
+                    search_text ILIKE '${likePattern}'
+                )
+            `;
+            rankingClause = `
+                (
+                    CASE 
+                        WHEN "firstName" ILIKE '${prefixPattern}' THEN 5
+                        WHEN "lastName" ILIKE '${prefixPattern}' THEN 5
+                        WHEN email ILIKE '${prefixPattern}' THEN 4
+                        ELSE 0
+                    END +
+                    similarity(search_text, '${searchText}') * 2 +
+                    CASE 
+                        WHEN search_text ILIKE '${likePattern}' THEN 1
+                        ELSE 0
+                    END
+                ) / 3
+            `;
+        } else {
+            // Longer queries: Enhanced full-text + trigram + substring
+            const searchQuery = searchText.split(/\s+/).join(' & ');
+            const likePattern = `%${searchText}%`;
+            whereClause = `
+                "userId" = '${ctx.user!.uid}' AND (
+                    -- Full-text search with plainto_tsquery for flexible matching
+                    search_vector @@ plainto_tsquery('english', '${searchText}')
+                    OR
+                    -- Traditional tsquery for exact phrase matching
+                    search_vector @@ to_tsquery('english', '${searchQuery}')
+                    OR
+                    -- Fuzzy match using trigram similarity
+                    similarity(search_text, '${searchText}') > 0.2
+                    OR
+                    -- Substring fallback
+                    search_text ILIKE '${likePattern}'
+                )
+            `;
+            rankingClause = `
+                (
+                    ts_rank(search_vector, plainto_tsquery('english', '${searchText}')) * 3 +
+                    ts_rank(search_vector, to_tsquery('english', '${searchQuery}')) * 2 +
+                    similarity(search_text, '${searchText}') * 2 +
+                    CASE 
+                        WHEN search_text ILIKE '${likePattern}' THEN 0.5
+                        ELSE 0
+                    END
+                ) / 4
+            `;
+        }
+
+        const customers = await Customer.findAll({
+            where: Sequelize.literal(whereClause),
+            attributes: {
+                include: [
+                    [literal(rankingClause), 'rank']
+                ]
+            },
+            order: [
+                [literal('rank'), 'DESC'],
+                ['lastName', 'ASC'],
+                ['firstName', 'ASC']
+            ]
+        });
+
+        ctx.body = customers;
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            sendValidationError(ctx, error);
+            return;
+        }
+
+        ctx.log.error('Search error:', error);
+        sendInternalServerError(ctx, 'An error occurred while searching customers');
+    }
+});
+
 // GET /customers/:customerId - Returns full customer details with all related data
 router.get("/:customerId", validateCustomerId, async (ctx) => {
     const customerId = ctx.validatedCustomerId!;
@@ -352,57 +473,6 @@ router.delete("/:customerId", validateCustomerId, async (ctx) => {
     } catch (error) {
         ctx.log.error(error);
         sendInternalServerError(ctx);
-    }
-});
-
-router.get("/search", async (ctx) => {
-    try {
-        const { query } = searchSchema.parse(ctx.query);
-
-        // Clean and prepare the search query
-        const searchText = query.trim().toLowerCase();
-        const searchQuery = searchText.split(/\s+/).join(' & ');
-
-        const customers = await Customer.findAll({
-            where: Sequelize.literal(`
-                "userId" = '${ctx.user!.uid}' AND (
-                    -- Full-text search match
-                    search_vector @@ to_tsquery('english', '${searchQuery}')
-                    OR
-                    -- Fuzzy match using trigram similarity
-                    similarity(search_text, '${searchText}') > 0.3
-                )
-            `),
-            attributes: {
-                include: [
-                    [
-                        // Combine both ranking methods
-                        literal(`
-                            (
-                                ts_rank(search_vector, to_tsquery('english', '${searchQuery}')) * 2 +
-                                similarity(search_text, '${searchText}')
-                            ) / 3
-                        `),
-                        'rank'
-                    ]
-                ]
-            },
-            order: [
-                [literal('rank'), 'DESC'],
-                ['lastName', 'ASC'],
-                ['firstName', 'ASC']
-            ]
-        });
-
-        ctx.body = customers;
-    } catch (error) {
-        if (error instanceof z.ZodError) {
-            sendValidationError(ctx, error);
-            return;
-        }
-
-        ctx.log.error('Search error:', error);
-        sendInternalServerError(ctx, 'An error occurred while searching customers');
     }
 });
 
