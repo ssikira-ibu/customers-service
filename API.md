@@ -130,7 +130,8 @@ All customer endpoints require authentication.
 
 ### GET `/customers`
 - **Response:** Array of customer summaries with counts (optimized for lists/tables)
-- **Includes:** `id`, `firstName`, `lastName`, `email`, `createdAt`, `updatedAt`, and a `count` object with related resource counts
+- **Includes:** `id`, `firstName`, `lastName`, `email`, `phones`, `createdAt`, `updatedAt`, and a `count` object with related resource counts
+- **Phones Array:** Each phone object contains `{ phoneNumber, designation }`
 - **Count Object:** `{ phones, addresses, notes, reminders }` - each containing the number of related records
 
 ### GET `/customers/:customerId`
@@ -300,6 +301,10 @@ All customer endpoints require authentication.
     "firstName": "John",
     "lastName": "Doe", 
     "email": "john@example.com",
+    "phones": [
+      { "phoneNumber": "+14155552671", "designation": "mobile" },
+      { "phoneNumber": "+16505551234", "designation": "work" }
+    ],
     "createdAt": "2024-01-01T00:00:00.000Z",
     "updatedAt": "2024-01-01T00:00:00.000Z",
     "count": {

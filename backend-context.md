@@ -123,7 +123,7 @@ The backend uses Firebase Authentication for user management and API security:
 
 #### GET `/customers`
 - **Description:** Get all customers for authenticated user with summary data optimized for lists/tables
-- **Response:** Array of customer objects with count object containing related resource counts
+- **Response:** Array of customer objects with phone numbers and count object containing related resource counts
 - **Response Format:**
   ```json
   [
@@ -132,6 +132,10 @@ The backend uses Firebase Authentication for user management and API security:
       "firstName": "John",
       "lastName": "Doe",
       "email": "john@example.com",
+      "phones": [
+        { "phoneNumber": "+14155552671", "designation": "mobile" },
+        { "phoneNumber": "+16505551234", "designation": "work" }
+      ],
       "createdAt": "2024-01-01T00:00:00.000Z",
       "updatedAt": "2024-01-01T00:00:00.000Z",
       "count": {
@@ -143,6 +147,11 @@ The backend uses Firebase Authentication for user management and API security:
     }
   ]
   ```
+- **Notes:**
+  - `phones` array contains all phone numbers for the customer with `phoneNumber` and `designation` fields
+  - Phones are ordered by creation date (oldest first)
+  - `count` object provides totals for related resources without loading full data
+  - Optimized for dashboard tables and list views
 - **Auth Required:** Yes
 - **Status Codes:** 200 (success), 401 (unauthorized), 500 (error)
 

@@ -62,46 +62,56 @@ const router = new Router<DefaultState, ValidationContext>({
 // GET /customers - Returns summary data optimized for lists/tables
 router.get("/", async (ctx) => {
     try {
-        // First get all customers for this user
-        const customers = await Customer.findAll({
-            where: {
-                userId: ctx.user!.uid
+      // First get all customers for this user
+      const customers = await Customer.findAll({
+        where: {
+          userId: ctx.user!.uid,
+        },
+        order: [
+          ["lastName", "ASC"],
+          ["firstName", "ASC"],
+        ],
+      });
+
+      // Then get counts and phone numbers for each customer
+      const customersWithCounts = await Promise.all(
+        customers.map(async (customer) => {
+          const [phoneCount, addressCount, noteCount, reminderCount, phones] =
+            await Promise.all([
+              CustomerPhone.count({ where: { customerId: customer.id } }),
+              CustomerAddress.count({ where: { customerId: customer.id } }),
+              CustomerNote.count({ where: { customerId: customer.id } }),
+              CustomerReminder.count({ where: { customerId: customer.id } }),
+              CustomerPhone.findAll({
+                where: { customerId: customer.id },
+                attributes: ["phoneNumber", "designation"],
+                order: [["createdAt", "ASC"]],
+              }),
+            ]);
+
+          return {
+            id: customer.id,
+            firstName: customer.firstName,
+            lastName: customer.lastName,
+            email: customer.email,
+            createdAt: customer.createdAt,
+            updatedAt: customer.updatedAt,
+            phones: phones.map((phone) => ({
+              phoneNumber: phone.phoneNumber,
+              designation: phone.designation,
+            })),
+            count: {
+              phones: phoneCount,
+              addresses: addressCount,
+              notes: noteCount,
+              reminders: reminderCount,
             },
-            order: [
-                ['lastName', 'ASC'],
-                ['firstName', 'ASC']
-            ]
-        });
+          };
+        })
+      );
 
-        // Then get counts for each customer using Sequelize's count method
-        const customersWithCounts = await Promise.all(
-            customers.map(async (customer) => {
-                const [phoneCount, addressCount, noteCount, reminderCount] = await Promise.all([
-                    CustomerPhone.count({ where: { customerId: customer.id } }),
-                    CustomerAddress.count({ where: { customerId: customer.id } }),
-                    CustomerNote.count({ where: { customerId: customer.id } }),
-                    CustomerReminder.count({ where: { customerId: customer.id } })
-                ]);
-
-                return {
-                    id: customer.id,
-                    firstName: customer.firstName,
-                    lastName: customer.lastName,
-                    email: customer.email,
-                    createdAt: customer.createdAt,
-                    updatedAt: customer.updatedAt,
-                    count: {
-                        phones: phoneCount,
-                        addresses: addressCount,
-                        notes: noteCount,
-                        reminders: reminderCount
-                    }
-                };
-            })
-        );
-
-        ctx.body = customersWithCounts;
-        ctx.status = 200;
+      ctx.body = customersWithCounts;
+      ctx.status = 200;
     } catch (error) {
         ctx.log.error(error);
         sendInternalServerError(ctx);
