@@ -7,6 +7,15 @@ import { User } from '../db/user';
 import { sequelize } from '../db/database';
 import { authenticate } from '../middleware/auth';
 import { ensureUserExists } from '../utils/user';
+import {
+  sendValidationError,
+  sendInternalServerError,
+  sendConflictError,
+  sendUnauthorizedError,
+  ErrorCode,
+  createApiError,
+  sendError
+} from '../utils/errors';
 
 const signupSchema = z.object({
     email: z.string().email({ message: 'Invalid email address' }),
@@ -30,8 +39,7 @@ router.post('/signup', async (ctx) => {
         const result = signupSchema.safeParse(ctx.request.body);
         
         if (!result.success) {
-            ctx.status = 400;
-            ctx.body = { errors: result.error.errors };
+            sendValidationError(ctx, result.error);
             return;
         }
 
@@ -73,13 +81,11 @@ router.post('/signup', async (ctx) => {
         ctx.log.error('Signup error:', error);
         
         if (error.code === 'auth/email-already-exists') {
-            ctx.status = 409;
-            ctx.body = { error: 'Email already in use' };
+            sendConflictError(ctx, 'Email already in use');
             return;
         }
 
-        ctx.status = 500;
-        ctx.body = { error: 'Failed to create user' };
+        sendInternalServerError(ctx, 'Failed to create user');
     }
 });
 
@@ -88,8 +94,7 @@ router.post('/login', async (ctx) => {
         const result = loginSchema.safeParse(ctx.request.body);
         
         if (!result.success) {
-            ctx.status = 400;
-            ctx.body = { errors: result.error.errors };
+            sendValidationError(ctx, result.error);
             return;
         }
 
@@ -103,8 +108,7 @@ router.post('/login', async (ctx) => {
         // For local testing, we'll just check if the user exists and generate a token
         
         if (userRecord.disabled) {
-            ctx.status = 401;
-            ctx.body = { error: 'Account is disabled' };
+            sendUnauthorizedError(ctx, 'Account is disabled');
             return;
         }
 
@@ -122,13 +126,11 @@ router.post('/login', async (ctx) => {
         ctx.log.error('Login error:', error);
         
         if (error.code === 'auth/user-not-found') {
-            ctx.status = 401;
-            ctx.body = { error: 'Invalid email or password' };
+            sendUnauthorizedError(ctx, 'Invalid email or password');
             return;
         }
 
-        ctx.status = 500;
-        ctx.body = { error: 'Login failed' };
+        sendInternalServerError(ctx, 'Login failed');
     }
 });
 
@@ -136,8 +138,7 @@ router.get('/me', authenticate, async (ctx) => {
     // ctx.user is set by the authenticate middleware
     const userId = ctx.user?.uid;
     if (!userId) {
-        ctx.status = 401;
-        ctx.body = { error: 'Unauthorized' };
+        sendUnauthorizedError(ctx);
         return;
     }
 
@@ -159,9 +160,8 @@ router.get('/me', authenticate, async (ctx) => {
         ctx.status = 200;
     } catch (error) {
         ctx.log.error('Error fetching user info:', error);
-        ctx.status = 500;
-        ctx.body = { error: 'Failed to fetch user information' };
+        sendInternalServerError(ctx, 'Failed to fetch user information');
     }
 });
 
-export default router; 
+export default router;

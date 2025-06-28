@@ -63,3 +63,9 @@ Core models with relationships:
 - Firebase credentials via `FIREBASE_CREDENTIALS` (base64-encoded)
 - Database connection via `DB_*` environment variables
 - Runs on port from `PORT` env var (defaults to 8080)
+
+### CORS Configuration
+- Automatically allows localhost origins during development
+- Supports credentials for authentication
+- Production origins must be explicitly configured in `src/app.ts`
+- Allows standard HTTP methods (GET, POST, PUT, PATCH, DELETE, OPTIONS)

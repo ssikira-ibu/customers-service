@@ -130,7 +130,8 @@ All customer endpoints require authentication.
 
 ### GET `/customers`
 - **Response:** Array of customer summaries with counts (optimized for lists/tables)
-- **Includes:** `id`, `firstName`, `lastName`, `email`, `phoneCount`, `addressCount`, `noteCount`, `reminderCount`, `createdAt`, `updatedAt`
+- **Includes:** `id`, `firstName`, `lastName`, `email`, `createdAt`, `updatedAt`, and a `count` object with related resource counts
+- **Count Object:** `{ phones, addresses, notes, reminders }` - each containing the number of related records
 
 ### GET `/customers/:customerId`
 - **Response:** Full customer object with all related data (phones, addresses, notes, reminders)
@@ -283,6 +284,28 @@ All customer endpoints require authentication.
 - All endpoints (except `/auth` and `/health`) require authentication.
 - All POST/PUT/PATCH/DELETE endpoints expect and return JSON.
 - Timestamps are in ISO 8601 format.
-- Customer list endpoint returns summary data optimized for tables/lists.
+- Customer list endpoint returns summary data optimized for tables/lists with nested count object.
 - Customer detail endpoint returns full data with all related resources.
-- Reminder completion is handled via PATCH with `dateCompleted` field. 
+- Reminder completion is handled via PATCH with `dateCompleted` field.
+
+## Response Examples
+
+### GET `/customers` Response Format
+```json
+[
+  {
+    "id": "uuid",
+    "firstName": "John",
+    "lastName": "Doe", 
+    "email": "john@example.com",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z",
+    "count": {
+      "phones": 2,
+      "addresses": 1,
+      "notes": 5,
+      "reminders": 0
+    }
+  }
+]
+``` 

@@ -1,12 +1,21 @@
 import Router from "koa-router";
 import bodyParser from "koa-bodyparser";
-import { DefaultContext } from "../logging";
 import { DefaultState } from "koa";
 import { z } from "zod";
 import { Customer, CustomerAddress, CustomerNote, CustomerPhone, CustomerReminder } from "../db/models";
 import { authenticate } from "../middleware/auth";
-import { Op, Sequelize, literal } from "sequelize";
+import { validateCustomerId, ValidationContext } from "../middleware/validation";
+import { Op, Sequelize, literal, fn, col, where } from "sequelize";
+import { sequelize } from "../db/database";
 import { ensureUserExists } from "../utils/user";
+import { 
+  sendValidationError, 
+  sendNotFoundError, 
+  sendInternalServerError, 
+  sendConflictError,
+  handleSequelizeError,
+  sendError
+} from "../utils/errors";
 
 const phoneSchema = z.object({
     phoneNumber: z.string().min(1, { message: "phoneNumber is required" }),
@@ -44,7 +53,7 @@ const searchSchema = z.object({
     query: z.string().min(1, { message: "Search query is required" })
 }).strict();
 
-const router = new Router<DefaultState, DefaultContext>({
+const router = new Router<DefaultState, ValidationContext>({
     prefix: '/customers'
 })
     .use(bodyParser())
@@ -53,48 +62,61 @@ const router = new Router<DefaultState, DefaultContext>({
 // GET /customers - Returns summary data optimized for lists/tables
 router.get("/", async (ctx) => {
     try {
+        // First get all customers for this user
         const customers = await Customer.findAll({
+            where: {
+                userId: ctx.user!.uid
+            },
             order: [
                 ['lastName', 'ASC'],
                 ['firstName', 'ASC']
-            ],
-            where: {
-                userId: ctx.user.uid
-            },
-            attributes: [
-                'id', 'firstName', 'lastName', 'email', 'createdAt', 'updatedAt',
-                [literal('(SELECT COUNT(*) FROM "CustomerPhones" WHERE "CustomerPhones"."customerId" = "Customer"."id")'), 'phoneCount'],
-                [literal('(SELECT COUNT(*) FROM "CustomerAddresses" WHERE "CustomerAddresses"."customerId" = "Customer"."id")'), 'addressCount'],
-                [literal('(SELECT COUNT(*) FROM "CustomerNotes" WHERE "CustomerNotes"."customerId" = "Customer"."id")'), 'noteCount'],
-                [literal('(SELECT COUNT(*) FROM "CustomerReminders" WHERE "CustomerReminders"."customerId" = "Customer"."id")'), 'reminderCount']
             ]
         });
 
-        ctx.body = customers;
+        // Then get counts for each customer using Sequelize's count method
+        const customersWithCounts = await Promise.all(
+            customers.map(async (customer) => {
+                const [phoneCount, addressCount, noteCount, reminderCount] = await Promise.all([
+                    CustomerPhone.count({ where: { customerId: customer.id } }),
+                    CustomerAddress.count({ where: { customerId: customer.id } }),
+                    CustomerNote.count({ where: { customerId: customer.id } }),
+                    CustomerReminder.count({ where: { customerId: customer.id } })
+                ]);
+
+                return {
+                    id: customer.id,
+                    firstName: customer.firstName,
+                    lastName: customer.lastName,
+                    email: customer.email,
+                    createdAt: customer.createdAt,
+                    updatedAt: customer.updatedAt,
+                    count: {
+                        phones: phoneCount,
+                        addresses: addressCount,
+                        notes: noteCount,
+                        reminders: reminderCount
+                    }
+                };
+            })
+        );
+
+        ctx.body = customersWithCounts;
         ctx.status = 200;
     } catch (error) {
-        ctx.log.error(error)
-        ctx.status = 500;
-        ctx.body = { error: 'Internal server Error' };
+        ctx.log.error(error);
+        sendInternalServerError(ctx);
     }
-})
+});
 
 // GET /customers/:customerId - Returns full customer details with all related data
-router.get("/:customerId", async (ctx) => {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const customerId = ctx.params.customerId;
-
-    if (!uuidRegex.test(customerId)) {
-        ctx.status = 400;
-        ctx.body = { error: 'Invalid UUID format' };
-        return;
-    }
+router.get("/:customerId", validateCustomerId, async (ctx) => {
+    const customerId = ctx.validatedCustomerId!;
 
     try {
         const customer = await Customer.findOne({
             where: {
                 id: customerId,
-                userId: ctx.user.uid
+                userId: ctx.user!.uid
             },
             attributes: { exclude: ['userId'] },
             include: [{
@@ -125,36 +147,26 @@ router.get("/:customerId", async (ctx) => {
         });
 
         if (!customer) {
-            ctx.status = 404;
-            ctx.body = { error: 'Customer not found' };
+            sendNotFoundError(ctx, 'Customer');
             return;
         }
 
         ctx.body = customer;
         ctx.status = 200;
     } catch (error) {
-        ctx.log.error(error)
-        ctx.status = 500;
-        ctx.body = { error: 'Internal server Error' };
+        ctx.log.error(error);
+        sendInternalServerError(ctx);
     }
 });
 
 // PUT /customers/:customerId - Update customer data
-router.put("/:customerId", async (ctx) => {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const customerId = ctx.params.customerId;
-
-    if (!uuidRegex.test(customerId)) {
-        ctx.status = 400;
-        ctx.body = { error: 'Invalid UUID format' };
-        return;
-    }
+router.put("/:customerId", validateCustomerId, async (ctx) => {
+    const customerId = ctx.validatedCustomerId!;
 
     const result = customerUpdateSchema.safeParse(ctx.request.body);
 
     if (!result.success) {
-        ctx.status = 400;
-        ctx.body = { errors: result.error.errors };
+        sendValidationError(ctx, result.error);
         return;
     }
 
@@ -162,13 +174,12 @@ router.put("/:customerId", async (ctx) => {
         const customer = await Customer.findOne({
             where: {
                 id: customerId,
-                userId: ctx.user.uid
+                userId: ctx.user!.uid
             }
         });
 
         if (!customer) {
-            ctx.status = 404;
-            ctx.body = { error: 'Customer not found' };
+            sendNotFoundError(ctx, 'Customer');
             return;
         }
 
@@ -177,14 +188,13 @@ router.put("/:customerId", async (ctx) => {
             const existingCustomer = await Customer.findOne({
                 where: {
                     email: result.data.email,
-                    userId: ctx.user.uid,
+                    userId: ctx.user!.uid,
                     id: { [Op.ne]: customerId }
                 }
             });
 
             if (existingCustomer) {
-                ctx.status = 409;
-                ctx.body = { error: 'A customer with this email already exists' };
+                sendConflictError(ctx, 'A customer with this email already exists');
                 return;
             }
         }
@@ -202,32 +212,22 @@ router.put("/:customerId", async (ctx) => {
         ctx.log.error(error);
 
         if (error.name === 'SequelizeUniqueConstraintError') {
-            ctx.status = 409;
-            ctx.body = { error: 'A customer with this email already exists' };
+            sendError(ctx, 409, handleSequelizeError(error));
             return;
         }
 
-        ctx.status = 500;
-        ctx.body = { error: 'Internal server Error' };
+        sendInternalServerError(ctx);
     }
 });
 
 // PATCH /customers/:customerId - Partial update customer data
-router.patch("/:customerId", async (ctx) => {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const customerId = ctx.params.customerId;
-
-    if (!uuidRegex.test(customerId)) {
-        ctx.status = 400;
-        ctx.body = { error: 'Invalid UUID format' };
-        return;
-    }
+router.patch("/:customerId", validateCustomerId, async (ctx) => {
+    const customerId = ctx.validatedCustomerId!;
 
     const result = customerUpdateSchema.safeParse(ctx.request.body);
 
     if (!result.success) {
-        ctx.status = 400;
-        ctx.body = { errors: result.error.errors };
+        sendValidationError(ctx, result.error);
         return;
     }
 
@@ -235,13 +235,12 @@ router.patch("/:customerId", async (ctx) => {
         const customer = await Customer.findOne({
             where: {
                 id: customerId,
-                userId: ctx.user.uid
+                userId: ctx.user!.uid
             }
         });
 
         if (!customer) {
-            ctx.status = 404;
-            ctx.body = { error: 'Customer not found' };
+            sendNotFoundError(ctx, 'Customer');
             return;
         }
 
@@ -250,14 +249,13 @@ router.patch("/:customerId", async (ctx) => {
             const existingCustomer = await Customer.findOne({
                 where: {
                     email: result.data.email,
-                    userId: ctx.user.uid,
+                    userId: ctx.user!.uid,
                     id: { [Op.ne]: customerId }
                 }
             });
 
             if (existingCustomer) {
-                ctx.status = 409;
-                ctx.body = { error: 'A customer with this email already exists' };
+                sendConflictError(ctx, 'A customer with this email already exists');
                 return;
             }
         }
@@ -275,13 +273,11 @@ router.patch("/:customerId", async (ctx) => {
         ctx.log.error(error);
 
         if (error.name === 'SequelizeUniqueConstraintError') {
-            ctx.status = 409;
-            ctx.body = { error: 'A customer with this email already exists' };
+            sendError(ctx, 409, handleSequelizeError(error));
             return;
         }
 
-        ctx.status = 500;
-        ctx.body = { error: 'Internal server Error' };
+        sendInternalServerError(ctx);
     }
 });
 
@@ -289,8 +285,7 @@ router.post("/", async (ctx) => {
     const result = customerSchema.safeParse(ctx.request.body);
 
     if (!result.success) {
-        ctx.status = 400;
-        ctx.body = { errors: result.error.errors };
+        sendValidationError(ctx, result.error);
         return;
     }
 
@@ -298,25 +293,24 @@ router.post("/", async (ctx) => {
         const { phones, addresses, ...customerData } = result.data;
 
         // Ensure user exists in database, create if not
-        await ensureUserExists(ctx.user.uid);
+        await ensureUserExists(ctx.user!.uid);
 
         // Check if customer with this email already exists for the current user
         const existingCustomer = await Customer.findOne({
             where: {
                 email: customerData.email,
-                userId: ctx.user.uid
+                userId: ctx.user!.uid
             }
         });
 
         if (existingCustomer) {
-            ctx.status = 409; // Conflict
-            ctx.body = { error: 'A customer with this email already exists' };
+            sendConflictError(ctx, 'A customer with this email already exists');
             return;
         }
 
         const customer = await Customer.create({
             ...customerData,
-            userId: ctx.user.uid
+            userId: ctx.user!.uid
         });
 
         if (phones && phones.length > 0) {
@@ -334,32 +328,22 @@ router.post("/", async (ctx) => {
 
         // Check for unique constraint violation
         if (error.name === 'SequelizeUniqueConstraintError') {
-            ctx.status = 409; // Conflict
-            ctx.body = { error: 'A customer with this email already exists' };
+            sendError(ctx, 409, handleSequelizeError(error));
             return;
         }
 
-        ctx.status = 500;
-        ctx.body = { error: 'Internal server Error' };
+        sendInternalServerError(ctx);
     }
 });
 
-router.delete("/:customerId", async (ctx) => {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const customerId = ctx.params.customerId;
-
-    if (!uuidRegex.test(customerId)) {
-        ctx.status = 400;
-        ctx.body = { error: 'Invalid UUID format' };
-        return;
-    }
+router.delete("/:customerId", validateCustomerId, async (ctx) => {
+    const customerId = ctx.validatedCustomerId!;
 
     try {
         const customer = await Customer.findByPk(customerId);
 
         if (!customer) {
-            ctx.status = 404;
-            ctx.body = { error: 'Customer not found' };
+            sendNotFoundError(ctx, 'Customer');
             return;
         }
 
@@ -367,8 +351,7 @@ router.delete("/:customerId", async (ctx) => {
         ctx.status = 204;
     } catch (error) {
         ctx.log.error(error);
-        ctx.status = 500;
-        ctx.body = { error: 'Internal server Error' };
+        sendInternalServerError(ctx);
     }
 });
 
@@ -382,7 +365,7 @@ router.get("/search", async (ctx) => {
 
         const customers = await Customer.findAll({
             where: Sequelize.literal(`
-                "userId" = '${ctx.user.uid}' AND (
+                "userId" = '${ctx.user!.uid}' AND (
                     -- Full-text search match
                     search_vector @@ to_tsquery('english', '${searchQuery}')
                     OR
@@ -414,19 +397,12 @@ router.get("/search", async (ctx) => {
         ctx.body = customers;
     } catch (error) {
         if (error instanceof z.ZodError) {
-            ctx.status = 400;
-            ctx.body = {
-                error: "Validation failed",
-                details: error.errors
-            };
+            sendValidationError(ctx, error);
             return;
         }
 
-        ctx.status = 500;
-        ctx.body = {
-            error: "An error occurred while searching customers"
-        };
-        ctx.app.emit('error', error, ctx);
+        ctx.log.error('Search error:', error);
+        sendInternalServerError(ctx, 'An error occurred while searching customers');
     }
 });
 
