@@ -4,6 +4,7 @@ import { CustomerNote, defineCustomerNoteModel } from './note';
 import { CustomerPhone, initCustomerPhone } from './customerphone';
 import { logger } from '../logging';
 import { CustomerAddress, initAddress } from './address';
+import { CustomerReminder, defineCustomerReminderModel } from './reminder';
 import { User, defineUserModel } from './user';
 if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL is not defined in environment variables.');
@@ -23,6 +24,7 @@ export async function initializeDatabase() {
         defineCustomerNoteModel(sequelize);
         initCustomerPhone(sequelize);
         initAddress(sequelize);
+        defineCustomerReminderModel(sequelize);
         defineUserModel(sequelize);
 
         Customer.hasMany(CustomerNote, {
@@ -39,6 +41,9 @@ export async function initializeDatabase() {
 
         Customer.hasMany(CustomerAddress, { foreignKey: 'customerId', as: 'addresses' });
         CustomerAddress.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
+
+        Customer.hasMany(CustomerReminder, { foreignKey: 'customerId', as: 'reminders' });
+        CustomerReminder.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
 
         Customer.belongsTo(User, { foreignKey: 'userId', as: 'user' });
         User.hasMany(Customer, { foreignKey: 'userId', as: 'customers' });
