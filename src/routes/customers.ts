@@ -30,6 +30,12 @@ const customerSchema = z.object({
     addresses: z.array(addressSchema).optional()
 }).strict();
 
+const customerUpdateSchema = z.object({
+    firstName: z.string().min(1, { message: "firstName is required" }).optional(),
+    lastName: z.string().min(1, { message: "lastName is required" }).optional(),
+    email: z.string().email({ message: "Invalid email address" }).optional()
+}).strict();
+
 const noteSchema = z.object({
     note: z.string().min(1, { message: "note is required" })
 }).strict();
@@ -44,6 +50,7 @@ const router = new Router<DefaultState, DefaultContext>({
     .use(bodyParser())
     .use(authenticate);
 
+// GET /customers - Returns summary data optimized for lists/tables
 router.get("/", async (ctx) => {
     try {
         const customers = await Customer.findAll({
@@ -54,11 +61,47 @@ router.get("/", async (ctx) => {
             where: {
                 userId: ctx.user.uid
             },
-            attributes: { exclude: ['userId', 'createdAt', 'updatedAt'] },
+            attributes: [
+                'id', 'firstName', 'lastName', 'email', 'createdAt', 'updatedAt',
+                [literal('(SELECT COUNT(*) FROM "CustomerPhones" WHERE "CustomerPhones"."customerId" = "Customer"."id")'), 'phoneCount'],
+                [literal('(SELECT COUNT(*) FROM "CustomerAddresses" WHERE "CustomerAddresses"."customerId" = "Customer"."id")'), 'addressCount'],
+                [literal('(SELECT COUNT(*) FROM "CustomerNotes" WHERE "CustomerNotes"."customerId" = "Customer"."id")'), 'noteCount'],
+                [literal('(SELECT COUNT(*) FROM "CustomerReminders" WHERE "CustomerReminders"."customerId" = "Customer"."id")'), 'reminderCount']
+            ]
+        });
+
+        ctx.body = customers;
+        ctx.status = 200;
+    } catch (error) {
+        ctx.log.error(error)
+        ctx.status = 500;
+        ctx.body = { error: 'Internal server Error' };
+    }
+})
+
+// GET /customers/:customerId - Returns full customer details with all related data
+router.get("/:customerId", async (ctx) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const customerId = ctx.params.customerId;
+
+    if (!uuidRegex.test(customerId)) {
+        ctx.status = 400;
+        ctx.body = { error: 'Invalid UUID format' };
+        return;
+    }
+
+    try {
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            },
+            attributes: { exclude: ['userId'] },
             include: [{
                 model: CustomerNote,
                 as: 'notes',
-                attributes: { exclude: ['customerId'] }
+                attributes: { exclude: ['customerId'] },
+                order: [['createdAt', 'DESC']]
             },
             {
                 model: CustomerPhone,
@@ -73,19 +116,174 @@ router.get("/", async (ctx) => {
             {
                 model: CustomerReminder,
                 as: 'reminders',
-                attributes: { exclude: ['customerId', 'id'] }
-            }
-            ]
+                attributes: { exclude: ['customerId', 'id'] },
+                order: [
+                    ['dateCompleted', 'ASC NULLS FIRST'],
+                    ['dueDate', 'ASC']
+                ]
+            }]
         });
 
-        ctx.body = customers;
+        if (!customer) {
+            ctx.status = 404;
+            ctx.body = { error: 'Customer not found' };
+            return;
+        }
+
+        ctx.body = customer;
         ctx.status = 200;
     } catch (error) {
         ctx.log.error(error)
         ctx.status = 500;
         ctx.body = { error: 'Internal server Error' };
     }
-})
+});
+
+// PUT /customers/:customerId - Update customer data
+router.put("/:customerId", async (ctx) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const customerId = ctx.params.customerId;
+
+    if (!uuidRegex.test(customerId)) {
+        ctx.status = 400;
+        ctx.body = { error: 'Invalid UUID format' };
+        return;
+    }
+
+    const result = customerUpdateSchema.safeParse(ctx.request.body);
+
+    if (!result.success) {
+        ctx.status = 400;
+        ctx.body = { errors: result.error.errors };
+        return;
+    }
+
+    try {
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
+
+        if (!customer) {
+            ctx.status = 404;
+            ctx.body = { error: 'Customer not found' };
+            return;
+        }
+
+        // Check for email uniqueness if email is being updated
+        if (result.data.email && result.data.email !== customer.email) {
+            const existingCustomer = await Customer.findOne({
+                where: {
+                    email: result.data.email,
+                    userId: ctx.user.uid,
+                    id: { [Op.ne]: customerId }
+                }
+            });
+
+            if (existingCustomer) {
+                ctx.status = 409;
+                ctx.body = { error: 'A customer with this email already exists' };
+                return;
+            }
+        }
+
+        await customer.update(result.data);
+        
+        // Return updated customer without sensitive data
+        const updatedCustomer = await Customer.findByPk(customerId, {
+            attributes: { exclude: ['userId'] }
+        });
+
+        ctx.body = updatedCustomer;
+        ctx.status = 200;
+    } catch (error: any) {
+        ctx.log.error(error);
+
+        if (error.name === 'SequelizeUniqueConstraintError') {
+            ctx.status = 409;
+            ctx.body = { error: 'A customer with this email already exists' };
+            return;
+        }
+
+        ctx.status = 500;
+        ctx.body = { error: 'Internal server Error' };
+    }
+});
+
+// PATCH /customers/:customerId - Partial update customer data
+router.patch("/:customerId", async (ctx) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const customerId = ctx.params.customerId;
+
+    if (!uuidRegex.test(customerId)) {
+        ctx.status = 400;
+        ctx.body = { error: 'Invalid UUID format' };
+        return;
+    }
+
+    const result = customerUpdateSchema.safeParse(ctx.request.body);
+
+    if (!result.success) {
+        ctx.status = 400;
+        ctx.body = { errors: result.error.errors };
+        return;
+    }
+
+    try {
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
+
+        if (!customer) {
+            ctx.status = 404;
+            ctx.body = { error: 'Customer not found' };
+            return;
+        }
+
+        // Check for email uniqueness if email is being updated
+        if (result.data.email && result.data.email !== customer.email) {
+            const existingCustomer = await Customer.findOne({
+                where: {
+                    email: result.data.email,
+                    userId: ctx.user.uid,
+                    id: { [Op.ne]: customerId }
+                }
+            });
+
+            if (existingCustomer) {
+                ctx.status = 409;
+                ctx.body = { error: 'A customer with this email already exists' };
+                return;
+            }
+        }
+
+        await customer.update(result.data);
+        
+        // Return updated customer without sensitive data
+        const updatedCustomer = await Customer.findByPk(customerId, {
+            attributes: { exclude: ['userId'] }
+        });
+
+        ctx.body = updatedCustomer;
+        ctx.status = 200;
+    } catch (error: any) {
+        ctx.log.error(error);
+
+        if (error.name === 'SequelizeUniqueConstraintError') {
+            ctx.status = 409;
+            ctx.body = { error: 'A customer with this email already exists' };
+            return;
+        }
+
+        ctx.status = 500;
+        ctx.body = { error: 'Internal server Error' };
+    }
+});
 
 router.post("/", async (ctx) => {
     const result = customerSchema.safeParse(ctx.request.body);

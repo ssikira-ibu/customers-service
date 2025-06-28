@@ -4,15 +4,16 @@ import { DefaultContext } from "../../logging";
 import { DefaultState } from "koa";
 import { z } from "zod";
 import { Customer, CustomerPhone } from "../../db/models";
+import { authenticate, AuthContext } from "../../middleware/auth";
 
 const phoneSchema = z.object({
     phoneNumber: z.string().min(1, { message: "phoneNumber is required" }),
     designation: z.string().min(1, { message: "designation is required" })
 }).strict();
 
-const router = new Router<DefaultState, DefaultContext>({
+const router = new Router<DefaultState, AuthContext>({
     prefix: '/customers/:customerId/phones'
-}).use(bodyParser());
+}).use(bodyParser()).use(authenticate);
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -25,7 +26,27 @@ router.get("/", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     try {
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
+
+        if (!customer) {
+            ctx.status = 404;
+            ctx.body = { error: 'Customer not found' };
+            return;
+        }
+
         const phones = await CustomerPhone.findAll({
             where: { customerId },
             attributes: { exclude: ['customerId', 'id', 'createdAt', 'updatedAt'] }
@@ -49,6 +70,12 @@ router.post("/", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     const result = phoneSchema.safeParse(ctx.request.body);
 
     if (!result.success) {
@@ -59,7 +86,14 @@ router.post("/", async (ctx) => {
 
     try {
         const phone = result.data;
-        const customer = await Customer.findByPk(customerId);
+        
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
 
         if (!customer) {
             ctx.status = 404;
@@ -87,8 +121,33 @@ router.get("/:id", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     try {
-        const phone = await CustomerPhone.findByPk(phoneId);
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
+
+        if (!customer) {
+            ctx.status = 404;
+            ctx.body = { error: 'Customer not found' };
+            return;
+        }
+
+        const phone = await CustomerPhone.findOne({
+            where: {
+                id: phoneId,
+                customerId
+            }
+        });
 
         if (!phone) {
             ctx.status = 404;
@@ -115,6 +174,12 @@ router.put("/:id", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     const result = phoneSchema.safeParse(ctx.request.body);
 
     if (!result.success) {
@@ -125,7 +190,14 @@ router.put("/:id", async (ctx) => {
 
     try {
         const phone = result.data;
-        const customer = await Customer.findByPk(customerId);
+        
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
 
         if (!customer) {
             ctx.status = 404;
@@ -133,7 +205,12 @@ router.put("/:id", async (ctx) => {
             return;
         }
 
-        const updatedPhone = await CustomerPhone.findByPk(phoneId);
+        const updatedPhone = await CustomerPhone.findOne({
+            where: {
+                id: phoneId,
+                customerId
+            }
+        });
 
         if (!updatedPhone) {
             ctx.status = 404;
@@ -161,8 +238,20 @@ router.delete("/:id", async (ctx) => {
         return;
     }
 
+    if (!ctx.user?.uid) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized' };
+        return;
+    }
+
     try {
-        const customer = await Customer.findByPk(customerId);
+        // Verify the customer exists and belongs to the current user
+        const customer = await Customer.findOne({
+            where: {
+                id: customerId,
+                userId: ctx.user.uid
+            }
+        });
 
         if (!customer) {
             ctx.status = 404;
@@ -170,7 +259,12 @@ router.delete("/:id", async (ctx) => {
             return;
         }
 
-        const phone = await CustomerPhone.findByPk(phoneId);
+        const phone = await CustomerPhone.findOne({
+            where: {
+                id: phoneId,
+                customerId
+            }
+        });
 
         if (!phone) {
             ctx.status = 404;
