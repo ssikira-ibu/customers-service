@@ -16,7 +16,7 @@ import {
 } from "../../utils/errors";
 
 const reminderSchema = z.object({
-    description: z.string().max(1000).nullable().optional(),
+    description: z.string().min(1, { message: "Description is required" }).max(1000, { message: "Description must be 1000 characters or less" }),
     dueDate: z.string().datetime({ message: "Invalid date format" }),
     priority: z.enum(['low', 'medium', 'high']).optional(),
 }).strict();

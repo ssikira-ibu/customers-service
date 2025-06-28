@@ -244,8 +244,9 @@ All customer endpoints require authentication.
 - **Response:** Array of reminder objects for the customer (ordered by completion status, then due date).
 
 ### POST `/customers/:customerId/reminders`
-- **Request:** `{ description?, dueDate, priority? }`
+- **Request:** `{ description, dueDate, priority? }`
 - **Response:** Created reminder object.
+- **Notes:** `description` is required (1-1000 characters), `dueDate` must be ISO 8601 format
 - **Errors:** 400 (validation), 404 (customer not found), 500 (other)
 
 ### GET `/customers/:customerId/reminders/:id`
@@ -253,8 +254,9 @@ All customer endpoints require authentication.
 - **Errors:** 400 (invalid UUID), 404 (not found), 500 (other)
 
 ### PUT `/customers/:customerId/reminders/:id`
-- **Request:** `{ description?, dueDate, priority? }`
+- **Request:** `{ description, dueDate, priority? }`
 - **Response:** Updated reminder object.
+- **Notes:** `description` is required (1-1000 characters), `dueDate` must be ISO 8601 format
 - **Errors:** 400 (validation), 404 (not found), 500 (other)
 
 ### PATCH `/customers/:customerId/reminders/:id`
