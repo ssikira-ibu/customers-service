@@ -22,6 +22,9 @@ app.context.log = logger;
 initializeDatabase().then(() => {
     app
         .use(helmet())
+        .use(requestLogger)
+        .use(healthRouter.routes()) // Health endpoint without CORS
+        .use(healthRouter.allowedMethods())
         .use(cors({
             origin: (ctx) => {
                 const origin = ctx.get('Origin');
@@ -39,12 +42,9 @@ initializeDatabase().then(() => {
                     return '*';
                 }
                 
-                // Add your production domains here when needed
-                const allowedOrigins = [
-                    'https://google.com'
-                ];
-                
-                if (allowedOrigins.includes(origin)) {
+                // Use CORS_ORIGIN environment variable for production
+                const corsOrigin = process.env.CORS_ORIGIN;
+                if (corsOrigin && origin === corsOrigin) {
                     return origin;
                 }
                 
@@ -55,10 +55,7 @@ initializeDatabase().then(() => {
             allowHeaders: ['Content-Type', 'Authorization', 'Accept'],
             credentials: true,
         }))
-        .use(requestLogger)
         .use(authRouter.routes())
-        .use(healthRouter.routes())
-        .use(healthRouter.allowedMethods())
         .use(authRouter.allowedMethods())
         .use(remindersRouter.routes())
         .use(remindersRouter.allowedMethods())

@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "ts-node ./src/app.ts | pino-pretty",
+    "start": "node dist/app.js",
+    "start:dev": "ts-node ./src/app.ts | pino-pretty",
     "dev": "nodemon --watch 'src/**/*.ts' --exec 'ts-node --files' ./src/app.ts | pino-pretty --colorize",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
