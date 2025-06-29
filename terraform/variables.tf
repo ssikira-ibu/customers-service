@@ -7,8 +7,8 @@ variable "region" {
 
 variable "db_tier" {
   type    = string
-  default = "db-custom-2-7680"
-} # ~2 vCPU, 7.5 GB
+  default = "db-f1-micro"
+} # Shared CPU, 0.6 GB RAM - cost optimized for small datasets
 
 variable "db_password" {
   type      = string
