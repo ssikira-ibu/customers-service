@@ -32,7 +32,7 @@ resource "google_secret_manager_secret" "database_url" {
 
 resource "google_secret_manager_secret_version" "database_url" {
   secret      = google_secret_manager_secret.database_url.id
-  secret_data = "postgresql://app_user:${var.db_password}@/customers?host=/cloudsql/${google_sql_database_instance.pg.connection_name}"
+  secret_data = "postgres://app_user:${var.db_password}@localhost/customers?host=/cloudsql/${google_sql_database_instance.pg.connection_name}"
 }
 
 # ---- Cloud SQL -----------------------------------------------------------
@@ -141,6 +141,11 @@ resource "google_cloud_run_service" "api" {
         }
 
         env {
+          name  = "CLOUD_SQL_CONNECTION_NAME"
+          value = google_sql_database_instance.pg.connection_name
+        }
+
+        env {
           name  = "GOOGLE_CLOUD_PROJECT"
           value = var.project_id
         }
@@ -187,7 +192,7 @@ resource "google_cloud_run_service" "api" {
 
   traffic {
     latest_revision = true
-    percent = 100
+    percent         = 100
   }
 }
 

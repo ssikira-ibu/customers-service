@@ -1,19 +1,17 @@
 #!/bin/sh
 
-# For Cloud Run with Cloud SQL, we don't need to wait for external database
-# The connection is handled via Unix socket or Cloud SQL Proxy
-echo "Starting customers service..."
+# Cloud Run startup script for customers service
+echo '{"severity":"INFO","message":"Starting customers service container"}'
 
-# Set default environment variables for Cloud Run
+# Set default environment variables
 export NODE_ENV=${NODE_ENV:-production}
+echo '{"severity":"INFO","message":"Environment: '${NODE_ENV}'"}'
 
-# Run database migrations if DATABASE_URL is available
-if [ -n "$DATABASE_URL" ]; then
-    echo "Running database migrations..."
-    npx sequelize-cli db:migrate
-else
-    echo "No DATABASE_URL found, skipping migrations"
-fi
+# Database migrations run automatically during application startup
+# via the initializeDatabase() function in src/db/database.ts
+echo '{"severity":"INFO","message":"Database migrations handled automatically by application"}'
+
+echo '{"severity":"INFO","message":"Starting Node.js application"}'
 
 # Execute the main application
 exec "$@"
